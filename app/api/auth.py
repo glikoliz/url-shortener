@@ -1,23 +1,26 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.database import get_db
+from app.schemas.user import TokenResponse, UserRegister, UserRegisterResponse
+from app.services.auth_service import AuthService
 
 router = APIRouter()
 
 
-@router.post("/register")
-def register(email: str, password: str, db: Session = Depends(get_db)):
-    # TODO: implement registration
-    pass
+@router.post("/register", response_model=UserRegisterResponse, status_code=201)
+async def register(body: UserRegister, db: AsyncSession = Depends(get_db)):
+    service = AuthService(db)
+    user = await service.register(email=body.email, password=body.password)
+    return user
 
 
-@router.post("/login")
-def login(email: str, password: str, db: Session = Depends(get_db)):
-    # TODO: implement login
-    pass
-
-
-@router.post("/logout")
-def logout():
-    # TODO: implement logout
-    pass
+@router.post("/login", response_model=TokenResponse)
+async def login(
+    form: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+):
+    service = AuthService(db)
+    token = await service.login(email=form.username, password=form.password)
+    return TokenResponse(access_token=token)
