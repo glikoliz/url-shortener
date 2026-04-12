@@ -1,15 +1,26 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from __future__ import annotations
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, String, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.database import Base
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+
+if TYPE_CHECKING:
+    from app.models.link import Link
 
 
 class User(Base):
     __tablename__ = "users"
-    links = relationship("Link", back_populates="user")
 
-    id = Column(Integer, primary_key=True, index=True)
-    is_active = Column(Boolean, default=True)
-    email = Column(String(255), unique=True, index=True, nullable=False)
-    password_hash = Column(String(255), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), server_default=func.now()
+    )
+
+    links: Mapped[list["Link"]] = relationship(back_populates="user")
