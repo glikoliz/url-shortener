@@ -1,35 +1,57 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from fastapi.responses import RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import get_current_user
 from app.database import get_db
+from app.models.user import User
+from app.schemas.link import LinkCreate, LinkResponse
+from app.services.link_service import LinkService
 
 router = APIRouter()
 redirect_router = APIRouter()
 
 
-@router.post("")
-def create_short_link(
-    original_url: str,
-    custom_code: str = None,
-    ttl: int = None,
-    db: Session = Depends(get_db),
+@router.post("", response_model=LinkResponse, status_code=201)
+async def create_short_link(
+    body: LinkCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    # TODO: implement link creation
-    pass
+    service = LinkService(db)
+    result = await service.shorten_url(
+        original_url=str(body.original_url),
+        user_id=current_user.id,
+        custom_code=body.custom_code,
+        ttl_minutes=body.ttl_minutes,
+    )
+    return result
 
 
-@router.get("/{short_code}")
-def get_link_info(short_code: str, db: Session = Depends(get_db)):
-    # TODO: implement get link stats
-    pass
+@router.get("/{short_code}", response_model=LinkResponse)
+async def get_link_info(
+    short_code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    service = LinkService(db)
+    return await service.get_stats(short_code)
 
 
-@router.delete("/{short_code}")
-def delete_link(short_code: str, db: Session = Depends(get_db)):
-    # TODO: implement link deletion
-    pass
+@router.delete("/{short_code}", status_code=204)
+async def delete_link(
+    short_code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    service = LinkService(db)
+    await service.delete_link(short_code, user_id=current_user.id)
 
 
 @redirect_router.get("/s/{short_code}")
-def redirect_to_original(short_code: str, db: Session = Depends(get_db)):
-    # TODO: implement redirect with 302
-    pass
+async def redirect_to_original(
+    short_code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    service = LinkService(db)
+    original_url = await service.resolve_link(short_code)
+    return RedirectResponse(url=original_url, status_code=302)
