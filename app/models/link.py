@@ -1,23 +1,32 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, text
+from __future__ import annotations
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, ForeignKey, String, func, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.database import Base
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class Link(Base):
     __tablename__ = "links"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
+    original_url: Mapped[str] = mapped_column(String(2048))
+    short_code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), server_default=func.now()
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    clicks: Mapped[int] = mapped_column(default=text("0"), server_default=text("0"))
 
-    original_url = Column(String(2048), nullable=False)
-    short_code = Column(String(32), unique=True, index=True, nullable=False)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    expires_at = Column(DateTime(timezone=True), nullable=True)
-
-    clicks = Column(Integer, server_default=text("0"))
-
-    user = relationship("User", back_populates="links")
+    user: Mapped["User"] = relationship(back_populates="links")
