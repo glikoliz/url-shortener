@@ -1,23 +1,31 @@
-from sqlalchemy.orm import Session
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.link import Link
 
 
 class LinkRepository:
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    def create(self, link: Link) -> Link:
-        # TODO: implement
-        pass
+    async def create(self, link: Link) -> Link:
+        self.db.add(link)
+        await self.db.commit()
+        await self.db.refresh(link)
+        return link
 
-    def get_by_code(self, short_code: str) -> Link:
-        # TODO: implement
-        pass
+    async def get_by_code(self, short_code: str) -> Link | None:
+        result = await self.db.execute(
+            select(Link).where(Link.short_code == short_code)
+        )
+        return result.scalar_one_or_none()
 
-    def delete(self, link: Link):
-        # TODO: implement
-        pass
+    async def delete(self, link: Link) -> None:
+        await self.db.delete(link)
+        await self.db.commit()
 
-    def increment_clicks(self, link_id: int):
-        # TODO: implement
-        pass
+    async def increment_clicks(self, link_id: int) -> None:
+        await self.db.execute(
+            update(Link).where(Link.id == link_id).values(clicks=Link.clicks + 1)
+        )
+        await self.db.commit()
