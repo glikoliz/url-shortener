@@ -1,9 +1,10 @@
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
-from app.models.user import User
+import pytest
+
 from app.models.link import Link
+from app.models.user import User
 from app.services.auth_service import AuthService
 from app.services.link_service import LinkService
 
@@ -47,9 +48,10 @@ def mock_user():
             email=email,
             password_hash=password_hash,
             is_active=is_active,
-            created_at=datetime.now(timezone.utc)
+            created_at=datetime.now(timezone.utc),
         )
         return user
+
     return _make
 
 
@@ -70,7 +72,8 @@ def mock_link():
             short_code=short_code,
             clicks=clicks,
             created_at=datetime.now(timezone.utc),
-            expires_at=expires_at
+            expires_at=expires_at,
         )
         return link
+
     return _make
