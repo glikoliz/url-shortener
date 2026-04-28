@@ -1,7 +1,7 @@
-import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
+import pytest
 from fastapi import HTTPException
 
 from app.services.auth_service import AuthService, pwd_context
@@ -92,6 +92,7 @@ def test_verify_token_garbage():
 
 def test_verify_token_missing_sub():
     from jose import jwt
+
     from app.config import settings
 
     payload = {"exp": datetime.now(timezone.utc) + timedelta(hours=1)}

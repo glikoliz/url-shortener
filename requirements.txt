@@ -10,6 +10,7 @@ python-multipart
 asyncpg
 email-validator
 pydantic[email]
+pre-commit
 
 pytest
 pytest-asyncio
