@@ -29,3 +29,14 @@ class LinkRepository:
             update(Link).where(Link.id == link_id).values(clicks=Link.clicks + 1)
         )
         await self.db.commit()
+
+    async def increment_clicks_by_code(self, short_code: str) -> None:
+        """Used in background tasks where only short_code is available."""
+        await self.db.execute(
+            update(Link)
+            .where(Link.short_code == short_code)
+            .values(clicks=Link.clicks + 1)
+        )
+        await self.db.commit()
+
+

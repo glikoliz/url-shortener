@@ -3,11 +3,13 @@ import string
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.link import Link
 from app.repositories.link_repository import LinkRepository
+from app.services.cache_service import CacheService
 
 
 def _generate_short_code(length: int = 6) -> str:
@@ -16,8 +18,9 @@ def _generate_short_code(length: int = 6) -> str:
 
 
 class LinkService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(self, db: AsyncSession, redis: Redis | None = None) -> None:
         self.link_repo = LinkRepository(db)
+        self.cache = CacheService(redis) if redis else None
 
     async def shorten_url(
         self,
@@ -58,16 +61,37 @@ class LinkService:
         )
         link = await self.link_repo.create(link)
 
+        if self.cache:
+            await self.cache.set_url(
+                link.short_code, link.original_url, expires_at=link.expires_at
+            )
+
         return {
             **_link_to_dict(link),
             "short_url": f"{settings.base_url}/s/{link.short_code}",
         }
 
     async def resolve_link(self, short_code: str) -> str:
+        # Cache hit: Redis TTL handles expiration — zero DB queries
+        if self.cache:
+            cached_url = await self.cache.get_url(short_code)
+            if cached_url:
+                return cached_url
+
+        # Cache miss: fetch from DB, check expiration, then populate cache
         link = await self._get_link_or_404(short_code)
         self._check_expiration(link)
-        await self.link_repo.increment_clicks(link.id)
+
+        if self.cache:
+            await self.cache.set_url(
+                short_code, link.original_url, expires_at=link.expires_at
+            )
+
         return link.original_url
+
+    async def count_click(self, short_code: str) -> None:
+        """Increment click counter. Runs as a background task after redirect."""
+        await self.link_repo.increment_clicks_by_code(short_code)
 
     async def get_stats(self, short_code: str):
         link = await self._get_link_or_404(short_code)
@@ -84,6 +108,8 @@ class LinkService:
                 detail="You can only delete your own links",
             )
         await self.link_repo.delete(link)
+        if self.cache:
+            await self.cache.delete_url(short_code)
 
     async def _get_link_or_404(self, short_code: str) -> Link:
         link = await self.link_repo.get_by_code(short_code)
@@ -112,3 +138,4 @@ def _link_to_dict(link: Link) -> dict:
         "created_at": link.created_at,
         "expires_at": link.expires_at,
     }
+
