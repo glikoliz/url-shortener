@@ -1,11 +1,23 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
+from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import auth, links
 from app.database import get_db
+from app.redis import close_redis, get_redis, init_redis
 
-app = FastAPI(title="URL Shortener API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_redis()
+    yield
+    await close_redis()
+
+
+app = FastAPI(title="URL Shortener API", version="1.0.0", lifespan=lifespan)
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(links.router, prefix="/api/v1/links", tags=["links"])
@@ -18,9 +30,24 @@ def root():
 
 
 @app.get("/ping", tags=["healthcheck"])
-async def ping_db(db: AsyncSession = Depends(get_db)):
+async def ping(
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    result = {}
+
     try:
-        result = await db.execute(text("SELECT 1"))
-        return {"status": "ok", "db": "connected", "result": result.scalar()}
+        await db.execute(text("SELECT 1"))
+        result["db"] = "connected"
     except Exception as e:
-        return {"status": "error", "db": "disconnected", "detail": str(e)}
+        result["db"] = f"error: {e}"
+
+    try:
+        await redis.ping()
+        result["redis"] = "connected"
+    except Exception as e:
+        result["redis"] = f"error: {e}"
+
+    all_ok = all("error" not in v for v in result.values())
+    result["status"] = "ok" if all_ok else "degraded"
+    return result
