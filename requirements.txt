@@ -12,7 +12,7 @@ email-validator
 pydantic[email]
 pre-commit
 redis[hiredis]
-fastapi-limiter
+fastapi-limiter==0.1.6
 
 pytest
 pytest-asyncio
