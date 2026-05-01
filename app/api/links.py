@@ -1,11 +1,10 @@
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import RedirectResponse
-from app.limiter import RateLimiter, limiter_manager
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
-from app.limiter import limiter_manager
 from app.database import get_db
+from app.limiter import RateLimiter
 from app.models.user import User
 from app.redis import get_redis
 from app.schemas.link import LinkCreate, LinkResponse

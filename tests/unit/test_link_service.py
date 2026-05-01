@@ -168,3 +168,48 @@ async def test_delete_link_not_found(link_service):
         await link_service.delete_link("nonexistent", user_id=1)
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_link_cache_hit(link_service, mock_redis):
+    mock_redis.get.return_value = "https://cached-url.com"
+
+    url = await link_service.resolve_link("cache1")
+
+    assert url == "https://cached-url.com"
+    link_service.link_repo.get_by_code.assert_not_awaited()
+    mock_redis.get.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_resolve_link_cache_miss(link_service, mock_link, mock_redis):
+    mock_redis.get.return_value = None
+    link = mock_link(original_url="https://db-url.com", short_code="miss1")
+    link_service.link_repo.get_by_code.return_value = link
+
+    url = await link_service.resolve_link("miss1")
+
+    assert url == "https://db-url.com"
+    link_service.link_repo.get_by_code.assert_awaited_once_with("miss1")
+    mock_redis.set.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_shorten_url_saves_to_cache(link_service, mock_link, mock_redis):
+    created_link = mock_link(short_code="new1", original_url="https://new.com")
+    link_service.link_repo.get_by_code.return_value = None
+    link_service.link_repo.create.return_value = created_link
+
+    await link_service.shorten_url(original_url="https://new.com", user_id=1)
+
+    mock_redis.set.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_link_invalidates_cache(link_service, mock_link, mock_redis):
+    link = mock_link(user_id=1, short_code="del1")
+    link_service.link_repo.get_by_code.return_value = link
+
+    await link_service.delete_link("del1", user_id=1)
+
+    mock_redis.delete.assert_awaited_once()

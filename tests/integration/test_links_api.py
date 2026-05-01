@@ -128,3 +128,25 @@ async def test_delete_link_forbidden(client):
         headers={"Authorization": f"Bearer {token_other}"},
     )
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_link_rate_limit(client):
+    token = await _get_token(client, email="rate@limit.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    for _ in range(10):
+        response = await client.post(
+            "/api/v1/links",
+            json={"original_url": "https://example.com"},
+            headers=headers,
+        )
+        assert response.status_code == 201
+
+    response = await client.post(
+        "/api/v1/links",
+        json={"original_url": "https://example.com"},
+        headers=headers,
+    )
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Too Many Requests"

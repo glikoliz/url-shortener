@@ -8,9 +8,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
 
 from app.database import Base, get_db
 from app.main import app
+from app.redis import get_redis
 
 
 @pytest.fixture(scope="session")
@@ -19,6 +21,12 @@ def postgres_url():
         sync_url = pg.get_connection_url()
         async_url = sync_url.replace("postgresql+psycopg2://", "postgresql+asyncpg://")
         yield async_url
+
+
+@pytest.fixture(scope="session")
+def redis_url():
+    with RedisContainer("redis:7-alpine") as redis:
+        yield f"redis://{redis.get_container_host_ip()}:{redis.get_exposed_port(6379)}/0"
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -31,14 +39,20 @@ async def db_engine(postgres_url):
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def clear_database(db_engine):
+async def clear_database(db_engine, redis_url):
     async with db_engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             await conn.execute(text(f"TRUNCATE TABLE {table.name} CASCADE;"))
 
+    from redis.asyncio import Redis
+
+    test_redis = Redis.from_url(redis_url)
+    await test_redis.flushdb()
+    await test_redis.aclose()
+
 
 @pytest_asyncio.fixture
-async def client(db_engine):
+async def client(db_engine, redis_url):
     TestingSessionLocal = async_sessionmaker(
         db_engine, class_=AsyncSession, expire_on_commit=False
     )
@@ -49,19 +63,20 @@ async def client(db_engine):
 
     app.dependency_overrides[get_db] = _override_get_db
 
-    from unittest.mock import AsyncMock
+    from redis.asyncio import Redis
 
-    from fastapi_limiter import FastAPILimiter
+    from app.limiter import limiter_manager
 
-    from app.redis import get_redis
+    test_redis = Redis.from_url(redis_url, decode_responses=True)
+    app.dependency_overrides[get_redis] = lambda: test_redis
 
-    redis_mock = AsyncMock()
-    redis_mock.script_load.return_value = "mock_lua_sha"
-    redis_mock.evalsha.return_value = 0
-    redis_mock.get.return_value = None
-    app.dependency_overrides[get_redis] = lambda: redis_mock
-
-    await FastAPILimiter.init(redis_mock)
+    await limiter_manager.init_limiter(
+        "auth:register", test_redis, requests=3, seconds=60
+    )
+    await limiter_manager.init_limiter("auth:login", test_redis, requests=5, seconds=60)
+    await limiter_manager.init_limiter(
+        "links:create", test_redis, requests=10, seconds=60
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -70,4 +85,4 @@ async def client(db_engine):
         yield ac
 
     app.dependency_overrides.clear()
-    await FastAPILimiter.close()
+    await test_redis.aclose()

@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
-from app.limiter import RateLimiter, limiter_manager
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.limiter import limiter_manager
+from app.limiter import RateLimiter
 from app.schemas.user import TokenResponse, UserRegister, UserRegisterResponse
 from app.services.auth_service import AuthService
 

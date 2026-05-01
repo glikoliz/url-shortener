@@ -25,8 +25,15 @@ def auth_service(mock_db):
 
 
 @pytest.fixture
-def link_service(mock_db):
-    service = LinkService(mock_db)
+def mock_redis():
+    mock = AsyncMock()
+    mock.get.return_value = None
+    return mock
+
+
+@pytest.fixture
+def link_service(mock_db, mock_redis):
+    service = LinkService(mock_db, redis=mock_redis)
     service.link_repo = MagicMock()
     service.link_repo.get_by_code = AsyncMock()
     service.link_repo.create = AsyncMock()
