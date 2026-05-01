@@ -11,6 +11,8 @@ asyncpg
 email-validator
 pydantic[email]
 pre-commit
+redis[hiredis]
+fastapi-limiter
 
 pytest
 pytest-asyncio

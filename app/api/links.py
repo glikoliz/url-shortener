@@ -1,5 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import RedirectResponse
+from fastapi_limiter.depends import RateLimiter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
@@ -13,7 +14,12 @@ router = APIRouter()
 redirect_router = APIRouter()
 
 
-@router.post("", response_model=LinkResponse, status_code=201)
+@router.post(
+    "",
+    response_model=LinkResponse,
+    status_code=201,
+    dependencies=[Depends(RateLimiter(times=10, seconds=60))],
+)
 async def create_short_link(
     body: LinkCreate,
     db: AsyncSession = Depends(get_db),

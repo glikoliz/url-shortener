@@ -1,20 +1,23 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi_limiter import FastAPILimiter
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import auth, links
-from app.database import get_db
+from app.database import engine, get_db
 from app.redis import close_redis, get_redis, init_redis
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_redis()
+    redis = await init_redis()
+    await FastAPILimiter.init(redis)
     yield
     await close_redis()
+    await engine.dispose()
 
 
 app = FastAPI(title="URL Shortener API", version="1.0.0", lifespan=lifespan)
