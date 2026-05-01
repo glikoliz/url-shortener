@@ -90,7 +90,12 @@ async def test_resolve_link_success(link_service, mock_link):
     url = await link_service.resolve_link("abc123")
 
     assert url == "https://google.com"
-    link_service.link_repo.increment_clicks.assert_awaited_once_with(link.id)
+
+
+@pytest.mark.asyncio
+async def test_count_click(link_service):
+    await link_service.count_click("abc123")
+    link_service.link_repo.increment_clicks_by_code.assert_awaited_once_with("abc123")
 
 
 @pytest.mark.asyncio

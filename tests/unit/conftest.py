@@ -32,6 +32,7 @@ def link_service(mock_db):
     service.link_repo.create = AsyncMock()
     service.link_repo.delete = AsyncMock()
     service.link_repo.increment_clicks = AsyncMock()
+    service.link_repo.increment_clicks_by_code = AsyncMock()
     return service
 
 

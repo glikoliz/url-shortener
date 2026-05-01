@@ -2,8 +2,10 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 
+from app.api.dependencies import get_current_user
+from app.models.user import User
 from app.services.auth_service import AuthService, pwd_context
 
 
@@ -102,3 +104,44 @@ def test_verify_token_missing_sub():
         AuthService.verify_token(token)
 
     assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_success(mock_db):
+    user = User(id=1, is_active=True)
+
+    with patch("app.api.dependencies.AuthService.verify_token", return_value=1):
+        with patch(
+            "app.api.dependencies.UserRepository.get_by_id", return_value=user
+        ) as mock_get:
+            result = await get_current_user(token="valid_token", db=mock_db)
+
+            assert result == user
+            mock_get.assert_awaited_once_with(1)
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_not_found(mock_db):
+    with patch("app.api.dependencies.AuthService.verify_token", return_value=999):
+        with patch("app.api.dependencies.UserRepository.get_by_id", return_value=None):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_current_user(token="valid_token", db=mock_db)
+
+            assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+            assert exc_info.value.detail == "User not found"
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_deactivated(mock_db):
+    deactivated_user = User(id=1, is_active=False)
+
+    with patch("app.api.dependencies.AuthService.verify_token", return_value=1):
+        with patch(
+            "app.api.dependencies.UserRepository.get_by_id",
+            return_value=deactivated_user,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_current_user(token="valid_token", db=mock_db)
+
+            assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+            assert exc_info.value.detail == "User account is deactivated"

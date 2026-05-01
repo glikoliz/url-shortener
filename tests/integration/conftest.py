@@ -49,6 +49,20 @@ async def client(db_engine):
 
     app.dependency_overrides[get_db] = _override_get_db
 
+    from unittest.mock import AsyncMock
+
+    from fastapi_limiter import FastAPILimiter
+
+    from app.redis import get_redis
+
+    redis_mock = AsyncMock()
+    redis_mock.script_load.return_value = "mock_lua_sha"
+    redis_mock.evalsha.return_value = 0
+    redis_mock.get.return_value = None
+    app.dependency_overrides[get_redis] = lambda: redis_mock
+
+    await FastAPILimiter.init(redis_mock)
+
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -56,3 +70,4 @@ async def client(db_engine):
         yield ac
 
     app.dependency_overrides.clear()
+    await FastAPILimiter.close()
