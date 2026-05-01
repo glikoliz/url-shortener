@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi_limiter.depends import RateLimiter
+from app.limiter import RateLimiter, limiter_manager
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.limiter import limiter_manager
 from app.schemas.user import TokenResponse, UserRegister, UserRegisterResponse
 from app.services.auth_service import AuthService
 
@@ -14,7 +15,7 @@ router = APIRouter()
     "/register",
     response_model=UserRegisterResponse,
     status_code=201,
-    dependencies=[Depends(RateLimiter(times=3, seconds=60))],
+    dependencies=[Depends(RateLimiter(name="auth:register"))],
 )
 async def register(body: UserRegister, db: AsyncSession = Depends(get_db)):
     service = AuthService(db)
@@ -25,7 +26,7 @@ async def register(body: UserRegister, db: AsyncSession = Depends(get_db)):
 @router.post(
     "/login",
     response_model=TokenResponse,
-    dependencies=[Depends(RateLimiter(times=5, seconds=60))],
+    dependencies=[Depends(RateLimiter(name="auth:login"))],
 )
 async def login(
     form: OAuth2PasswordRequestForm = Depends(),

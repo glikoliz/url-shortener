@@ -12,10 +12,11 @@ email-validator
 pydantic[email]
 pre-commit
 redis[hiredis]
-fastapi-limiter==0.1.6
+fastapi-limiter>=0.2.0
 
 pytest
 pytest-asyncio
 pytest-cov
 testcontainers[postgres]
+testcontainers[redis]
 httpx

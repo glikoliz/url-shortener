@@ -1,20 +1,22 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
-from fastapi_limiter import FastAPILimiter
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import auth, links
 from app.database import engine, get_db
+from app.limiter import limiter_manager
 from app.redis import close_redis, get_redis, init_redis
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     redis = await init_redis()
-    await FastAPILimiter.init(redis)
+    await limiter_manager.init_limiter("auth:register", redis, requests=3, seconds=60)
+    await limiter_manager.init_limiter("auth:login", redis, requests=5, seconds=60)
+    await limiter_manager.init_limiter("links:create", redis, requests=10, seconds=60)
     yield
     await close_redis()
     await engine.dispose()
