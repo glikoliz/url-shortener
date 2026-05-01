@@ -138,4 +138,3 @@ def _link_to_dict(link: Link) -> dict:
         "created_at": link.created_at,
         "expires_at": link.expires_at,
     }
-

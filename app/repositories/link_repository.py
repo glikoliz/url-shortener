@@ -38,5 +38,3 @@ class LinkRepository:
             .values(clicks=Link.clicks + 1)
         )
         await self.db.commit()
-
-

@@ -67,4 +67,3 @@ async def redirect_to_original(
     original_url = await service.resolve_link(short_code)
     background_tasks.add_task(service.count_click, short_code)
     return RedirectResponse(url=original_url, status_code=302)
-
