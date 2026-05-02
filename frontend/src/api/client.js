@@ -40,5 +40,14 @@ export const apiClient = async (endpoint, { body, ...customConfig } = {}) => {
     window.location.reload();
   }
 
-  throw new Error(data?.detail || response.statusText || 'API Error');
+  let errorMessage = response.statusText || 'API Error';
+  if (data?.detail) {
+    if (typeof data.detail === 'string') {
+      errorMessage = data.detail;
+    } else if (Array.isArray(data.detail)) {
+      errorMessage = data.detail.map(e => `${e.loc[e.loc.length - 1]}: ${e.msg}`).join('; ');
+    }
+  }
+
+  throw new Error(errorMessage);
 };

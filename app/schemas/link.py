@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, HttpUrl
 class LinkCreate(BaseModel):
     original_url: HttpUrl
     custom_code: str | None = Field(default=None, examples=[None])
-    ttl_minutes: int | None = None
+    ttl_minutes: int | None = Field(default=None, le=31536000)
 
 
 class LinkResponse(BaseModel):

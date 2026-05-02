@@ -66,7 +66,10 @@ async def delete_link(
     await service.delete_link(short_code, user_id=current_user.id)
 
 
-@redirect_router.get("/s/{short_code}")
+@redirect_router.get(
+    "/s/{short_code}",
+    dependencies=[Depends(RateLimiter(name="links:redirect"))]
+)
 async def redirect_to_original(
     short_code: str,
     background_tasks: BackgroundTasks,

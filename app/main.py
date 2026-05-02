@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
     await limiter_manager.init_limiter("auth:register", redis, requests=3, seconds=60)
     await limiter_manager.init_limiter("auth:login", redis, requests=5, seconds=60)
     await limiter_manager.init_limiter("links:create", redis, requests=10, seconds=60)
+    await limiter_manager.init_limiter("links:redirect", redis, requests=5, seconds=60)
     yield
     await close_redis()
     await engine.dispose()
@@ -24,6 +26,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="URL Shortener API", version="1.0.0", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(links.router, prefix="/api/v1/links", tags=["links"])
 app.include_router(links.redirect_router, tags=["redirect"])
