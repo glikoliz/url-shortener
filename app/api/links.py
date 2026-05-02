@@ -67,8 +67,7 @@ async def delete_link(
 
 
 @redirect_router.get(
-    "/s/{short_code}",
-    dependencies=[Depends(RateLimiter(name="links:redirect"))]
+    "/s/{short_code}", dependencies=[Depends(RateLimiter(name="links:redirect"))]
 )
 async def redirect_to_original(
     short_code: str,
