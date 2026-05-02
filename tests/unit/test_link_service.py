@@ -260,3 +260,15 @@ async def test_delete_link_invalidates_cache(link_service, mock_link, mock_redis
     await link_service.delete_link("del1", user_id=1)
 
     mock_redis.delete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_shorten_url_self_redirect(link_service):
+    with pytest.raises(HTTPException) as exc_info:
+        await link_service.shorten_url(
+            original_url="http://localhost:8000/s/abc123",
+            user_id=1,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "Cannot shorten URLs pointing to this service" in exc_info.value.detail

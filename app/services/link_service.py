@@ -2,6 +2,7 @@ import secrets
 import string
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi import HTTPException, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,20 @@ def _generate_short_code(length: int = 6) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+async def _resolve_final_url(url: str) -> str:
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=3.0,
+            max_redirects=5,
+            headers={"User-Agent": "URLShortener/1.0"},
+        ) as client:
+            response = await client.get(url)
+            return str(response.url)
+    except Exception:
+        return url
+
+
 class LinkService:
     def __init__(self, db: AsyncSession, redis: Redis | None = None) -> None:
         self.link_repo = LinkRepository(db)
@@ -29,6 +44,16 @@ class LinkService:
         custom_code: str | None = None,
         ttl_minutes: int | None = None,
     ):
+        final_url = await _resolve_final_url(original_url)
+
+        if final_url.startswith(settings.base_url):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Cannot shorten URLs pointing to this service "
+                    "(even through redirects)"
+                ),
+            )
         if custom_code:
             existing = await self.link_repo.get_by_code(custom_code)
             if existing:
@@ -55,7 +80,7 @@ class LinkService:
 
         link = Link(
             user_id=user_id,
-            original_url=str(original_url),
+            original_url=final_url,
             short_code=short_code,
             expires_at=expires_at,
         )
