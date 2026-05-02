@@ -32,6 +32,8 @@ jobs:
       - name: Run Tests
         env:
           JWT_SECRET: ci_test_secret
+          DATABASE_URL: postgresql+asyncpg://user:pass@localhost:5432/db
+          REDIS_URL: redis://localhost:6379/0
         run: pytest --cov=app tests/
 
   frontend:
