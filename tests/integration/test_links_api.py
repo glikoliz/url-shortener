@@ -93,6 +93,55 @@ async def test_get_link_stats(client):
 
 
 @pytest.mark.asyncio
+async def test_get_link_detailed_stats(client):
+    token = await _get_token(client, email="detailed@test.com")
+
+    await client.post(
+        "/api/v1/links",
+        json={"original_url": "https://example.com", "custom_code": "det1"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    # Click it
+    await client.get("/s/det1", follow_redirects=False)
+
+    response = await client.get(
+        "/api/v1/links/det1/stats",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_clicks"] >= 1
+    assert "clicks_by_day" in data
+    assert "top_referers" in data
+    assert "top_countries" in data
+
+
+@pytest.mark.asyncio
+async def test_get_link_clicks(client):
+    token = await _get_token(client, email="clicks_api@test.com")
+
+    await client.post(
+        "/api/v1/links",
+        json={"original_url": "https://example.com", "custom_code": "cl1"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    # Click it
+    await client.get("/s/cl1", follow_redirects=False)
+
+    response = await client.get(
+        "/api/v1/links/cl1/clicks",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 1
+    assert "ip_address" in data[0]
+    assert "user_agent" in data[0]
+
+
+@pytest.mark.asyncio
 async def test_delete_link(client):
     token = await _get_token(client, email="delete@test.com")
 

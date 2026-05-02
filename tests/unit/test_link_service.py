@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -93,9 +94,55 @@ async def test_resolve_link_success(link_service, mock_link):
 
 
 @pytest.mark.asyncio
-async def test_count_click(link_service):
-    await link_service.count_click("abc123")
-    link_service.link_repo.increment_clicks_by_code.assert_awaited_once_with("abc123")
+async def test_count_click(link_service, mock_link):
+    link = mock_link(id=1, short_code="abc123")
+    link_service.link_repo.get_by_code.return_value = link
+
+    with patch("app.repositories.click_repository.ClickRepository") as MockClickRepo:
+        mock_repo_inst = MockClickRepo.return_value
+        mock_repo_inst.create = AsyncMock()
+
+        await link_service.count_click(
+            "abc123", "1.2.3.4", "Mozilla", "https://ref.com"
+        )
+
+        link_service.link_repo.increment_clicks_by_code.assert_awaited_once_with(
+            "abc123"
+        )
+        mock_repo_inst.create.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_clicks(link_service, mock_link):
+    link = mock_link(id=1, user_id=1, short_code="test1")
+    link_service.link_repo.get_by_code.return_value = link
+
+    with patch("app.repositories.click_repository.ClickRepository") as MockClickRepo:
+        mock_repo_inst = MockClickRepo.return_value
+        mock_repo_inst.get_by_link_id = AsyncMock(return_value=[])
+
+        result = await link_service.get_clicks("test1", user_id=1)
+
+        assert result == []
+        mock_repo_inst.get_by_link_id.assert_awaited_once_with(1)
+
+
+@pytest.mark.asyncio
+async def test_get_click_stats(link_service, mock_link):
+    link = mock_link(id=1, user_id=1, short_code="test1", clicks=5)
+    link_service.link_repo.get_by_code.return_value = link
+
+    with patch("app.repositories.click_repository.ClickRepository") as MockClickRepo:
+        mock_repo_inst = MockClickRepo.return_value
+        mock_repo_inst.get_aggregated_stats = AsyncMock(
+            return_value={"clicks_by_day": [], "top_referers": [], "top_countries": []}
+        )
+
+        result = await link_service.get_click_stats("test1", user_id=1)
+
+        assert result["total_clicks"] == 5
+        assert "clicks_by_day" in result
+        mock_repo_inst.get_aggregated_stats.assert_awaited_once_with(1)
 
 
 @pytest.mark.asyncio
