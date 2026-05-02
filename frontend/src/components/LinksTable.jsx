@@ -25,6 +25,15 @@ const LinksTable = ({ links, isLoading, onDelete }) => {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
+  const isValidUrl = (url) => {
+    try {
+      const parsed = new URL(url);
+      return ['http:', 'https:'].includes(parsed.protocol);
+    } catch {
+      return false;
+    }
+  };
+
   if (isLoading && links.length === 0) {
     return (
       <GlassCard>
@@ -66,10 +75,19 @@ const LinksTable = ({ links, isLoading, onDelete }) => {
             {links.map((link) => (
               <tr key={link.short_code} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }} className="hover-row">
                 <td style={{ padding: '16px' }}>
-                  <a href={link.short_url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: '500', color: '#00d4ff' }}>
-                    {link.short_url.replace(/^https?:\/\//, '')}
-                    <ExternalLink size={14} />
-                  </a>
+                  {isValidUrl(link.short_url) ? (
+                    <a
+                      href={link.short_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: '500', color: '#00d4ff' }}
+                    >
+                      {link.short_url.replace(/^https?:\/\//, '')}
+                      <ExternalLink size={14} />
+                    </a>
+                  ) : (
+                    <span style={{ color: 'var(--error-color)' }}>Invalid URL</span>
+                  )}
                 </td>
                 <td style={{ padding: '16px', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-secondary)', fontSize: '14px' }}>
                   {link.original_url}
