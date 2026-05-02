@@ -38,8 +38,7 @@ async def _resolve_final_url(url: str) -> str:
 class LinkService:
     def __init__(self, db: AsyncSession, redis: Redis | None = None) -> None:
         self.link_repo = LinkRepository(db)
-        self.redis = redis
-        self.cache = CacheService(redis) if redis else None
+        self.cache = CacheService(redis)
 
     async def shorten_url(
         self,
@@ -97,11 +96,6 @@ class LinkService:
         link = await self.link_repo.create(link)
         logger.info(f"URL shortened: {original_url} -> {short_code} (user: {user_id})")
 
-        if self.cache:
-            await self.cache.set_url(
-                link.short_code, link.original_url, expires_at=link.expires_at
-            )
-
         return {
             **_link_to_dict(link),
             "short_url": f"{settings.base_url}/s/{link.short_code}",
@@ -109,19 +103,17 @@ class LinkService:
 
     async def resolve_link(self, short_code: str) -> str:
         # Cache hit: Redis TTL handles expiration — zero DB queries
-        if self.cache:
-            cached_url = await self.cache.get_url(short_code)
-            if cached_url:
-                return cached_url
+        cached_url = await self.cache.get_url(short_code)
+        if cached_url:
+            return cached_url
 
         # Cache miss: fetch from DB, check expiration, then populate cache
         link = await self._get_link_or_404(short_code)
         self._check_expiration(link)
 
-        if self.cache:
-            await self.cache.set_url(
-                short_code, link.original_url, expires_at=link.expires_at
-            )
+        await self.cache.set_url(
+            short_code, link.original_url, expires_at=link.expires_at
+        )
 
         logger.info(f"Link resolved: {short_code} -> {link.original_url}")
         return link.original_url
@@ -168,8 +160,8 @@ class LinkService:
         country: str | None = None,
     ):
         cache_key = f"clicks:{short_code}:{skip}:{limit}:{ip}:{country}"
-        if self.redis:
-            cached_data = await self.redis.get(cache_key)
+        if self.cache.redis:
+            cached_data = await self.cache.redis.get(cache_key)
             if cached_data:
                 import json
 
@@ -190,7 +182,7 @@ class LinkService:
 
         response_data = {"items": items, "total": total}
 
-        if self.redis:
+        if self.cache.redis:
             import json
 
             from app.schemas.click import ClickEventResponse
@@ -203,7 +195,7 @@ class LinkService:
                 "owner_id": link.user_id,
                 "data": {"items": items_dict, "total": total},
             }
-            await self.redis.set(cache_key, json.dumps(cache_payload), ex=10)
+            await self.cache.redis.set(cache_key, json.dumps(cache_payload), ex=10)
 
         return response_data
 
@@ -211,8 +203,8 @@ class LinkService:
         self, short_code: str, user_id: int, granularity: str | None = None
     ):
         cache_key = f"stats:{short_code}:{granularity}"
-        if self.redis:
-            cached_data = await self.redis.get(cache_key)
+        if self.cache.redis:
+            cached_data = await self.cache.redis.get(cache_key)
             if cached_data:
                 import json
 
@@ -230,11 +222,11 @@ class LinkService:
         stats = await click_repo.get_aggregated_stats(link.id, granularity=granularity)
         stats["total_clicks"] = link.clicks
 
-        if self.redis:
+        if self.cache.redis:
             import json
 
             cache_payload = {"owner_id": link.user_id, "data": stats}
-            await self.redis.set(cache_key, json.dumps(cache_payload), ex=30)
+            await self.cache.redis.set(cache_key, json.dumps(cache_payload), ex=30)
 
         return stats
 

@@ -8,7 +8,7 @@ from app.config import settings
 class CacheService:
     PREFIX = "link"
 
-    def __init__(self, redis: Redis) -> None:
+    def __init__(self, redis: Redis | None) -> None:
         self.redis = redis
         self.ttl = settings.cache_ttl_seconds
 
@@ -16,6 +16,8 @@ class CacheService:
         return f"{self.PREFIX}:{short_code}"
 
     async def get_url(self, short_code: str) -> str | None:
+        if not self.redis:
+            return None
         return await self.redis.get(self._key(short_code))
 
     async def set_url(
@@ -24,6 +26,9 @@ class CacheService:
         original_url: str,
         expires_at: datetime | None = None,
     ) -> None:
+        if not self.redis:
+            return
+
         ttl = self.ttl
         if expires_at:
             seconds_left = int(
@@ -35,4 +40,6 @@ class CacheService:
         await self.redis.set(self._key(short_code), original_url, ex=ttl)
 
     async def delete_url(self, short_code: str) -> None:
+        if not self.redis:
+            return
         await self.redis.delete(self._key(short_code))
