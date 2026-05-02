@@ -143,8 +143,10 @@ class LinkService:
             await click_repo.create(event)
             await self.link_repo.increment_clicks_by_code(short_code)
 
-    async def get_stats(self, short_code: str):
+    async def get_stats(self, short_code: str, user_id: int):
         link = await self._get_link_or_404(short_code)
+        if link.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not your link")
         return {
             **_link_to_dict(link),
             "short_url": f"{settings.base_url}/s/{link.short_code}",

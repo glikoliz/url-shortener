@@ -51,9 +51,10 @@ async def get_user_links(
 async def get_link_info(
     short_code: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     service = LinkService(db)
-    return await service.get_stats(short_code)
+    return await service.get_stats(short_code, current_user.id)
 
 
 @router.get("/{short_code}/clicks", response_model=list[ClickEventResponse])
