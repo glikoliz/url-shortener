@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -14,6 +14,12 @@ if TYPE_CHECKING:
 
 class ClickEvent(Base):
     __tablename__ = "click_events"
+
+    __table_args__ = (
+        Index("ix_click_events_link_country", "link_id", "country"),
+        Index("ix_click_events_link_referer", "link_id", "referer"),
+        Index("ix_click_events_link_clicked_at", "link_id", "clicked_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     link_id: Mapped[int] = mapped_column(

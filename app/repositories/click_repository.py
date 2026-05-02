@@ -13,16 +13,51 @@ class ClickRepository:
         await self.db.refresh(click_event)
         return click_event
 
-    async def get_by_link_id(self, link_id: int, limit: int = 50) -> list[ClickEvent]:
-        from sqlalchemy import select
+    async def get_by_link_id(
+        self,
+        link_id: int,
+        skip: int = 0,
+        limit: int = 50,
+        ip: str | None = None,
+        country: str | None = None,
+    ) -> tuple[list[ClickEvent], int]:
+        from sqlalchemy import func, select
+
+        # Build base query
+        query = select(ClickEvent).where(ClickEvent.link_id == link_id)
+        count_query = (
+            select(func.count(ClickEvent.id))
+            .select_from(ClickEvent)
+            .where(ClickEvent.link_id == link_id)
+        )
+
+        if ip and ip.strip():
+            query = query.where(ClickEvent.ip_address.ilike(f"%{ip}%"))
+            count_query = count_query.where(ClickEvent.ip_address.ilike(f"%{ip}%"))
+
+        if country and country.strip():
+            from sqlalchemy import or_
+
+            if country == "null":
+                query = query.where(
+                    or_(ClickEvent.country.is_(None), ClickEvent.country == "")
+                )
+                count_query = count_query.where(
+                    or_(ClickEvent.country.is_(None), ClickEvent.country == "")
+                )
+            else:
+                query = query.where(ClickEvent.country == country)
+                count_query = count_query.where(ClickEvent.country == country)
+
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
 
         result = await self.db.execute(
-            select(ClickEvent)
-            .where(ClickEvent.link_id == link_id)
-            .order_by(ClickEvent.clicked_at.desc())
-            .limit(limit)
+            query.order_by(ClickEvent.clicked_at.desc()).offset(skip).limit(limit)
         )
-        return list(result.scalars().all())
+        items = list(result.scalars().all())
+
+        return items, total
 
     async def get_aggregated_stats(
         self, link_id: int, granularity: str | None = None
@@ -73,7 +108,7 @@ class ClickRepository:
             .where(ClickEvent.link_id == link_id)
             .group_by(ClickEvent.referer)
             .order_by(func.count().desc())
-            .limit(10)
+            .limit(20)
         )
 
         countries_query = (
@@ -81,7 +116,7 @@ class ClickRepository:
             .where(ClickEvent.link_id == link_id)
             .group_by(ClickEvent.country)
             .order_by(func.count().desc())
-            .limit(10)
+            .limit(20)
         )
 
         clicks_result = await self.db.execute(clicks_query)
@@ -102,7 +137,7 @@ class ClickRepository:
                 for r in referers_result.all()
             ],
             "top_countries": [
-                {"country": r.country or "Unknown", "clicks": r.clicks}
+                {"country": r.country, "clicks": r.clicks}
                 for r in countries_result.all()
             ],
         }

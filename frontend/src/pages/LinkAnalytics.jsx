@@ -132,7 +132,7 @@ const ClickRow = ({ click }) => (
       {click.referer || 'Direct'}
     </td>
     <td style={{ padding: '12px 16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-      {click.country || '—'}
+      {click.country || 'Unknown'}
     </td>
   </tr>
 );
@@ -149,16 +149,25 @@ const LinkAnalytics = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'clicked_at', direction: 'desc' });
   const [selectedGranularity, setSelectedGranularity] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalClicks, setTotalClicks] = useState(0);
+  const [ipFilter, setIpFilter] = useState('');
+  const [countryFilter, setCountryFilter] = useState('');
+  const CLICKS_PER_PAGE = 25;
 
-  const fetchAll = useCallback(async (gran = selectedGranularity) => {
+  const fetchAll = useCallback(async (gran = selectedGranularity, page = currentPage, ip = ipFilter, country = countryFilter) => {
     try {
+      const skip = (page - 1) * CLICKS_PER_PAGE;
       const statsUrl = gran ? `/links/${code}/stats?granularity=${gran}` : `/links/${code}/stats`;
-      const [s, c] = await Promise.all([
+      const clicksUrl = `/links/${code}/clicks?limit=${CLICKS_PER_PAGE}&skip=${skip}&ip=${ip}&country=${country}`;
+
+      const [s, cData] = await Promise.all([
         apiClient(statsUrl),
-        apiClient(`/links/${code}/clicks`),
+        apiClient(clicksUrl),
       ]);
       setStats(s);
-      setClicks(c);
+      setClicks(cData.items);
+      setTotalClicks(cData.total);
     } catch {
       /* handled by apiClient */
     } finally {
@@ -166,21 +175,21 @@ const LinkAnalytics = () => {
       setLoadingClicks(false);
       setRefreshing(false);
     }
-  }, [code, selectedGranularity]);
+  }, [code, selectedGranularity, currentPage, ipFilter, countryFilter]);
 
   useEffect(() => {
-    const initFetch = async () => {
-      await fetchAll();
-    };
-    initFetch();
-  }, [fetchAll]);
+    const timer = setTimeout(() => {
+      fetchAll();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [fetchAll, ipFilter, countryFilter, currentPage]);
 
   const handleRefresh = () => {
     setRefreshing(true);
     fetchAll();
   };
 
-  const topCountry = stats?.top_countries?.[0]?.country ?? '—';
+  const topCountry = stats?.top_countries?.[0]?.country || 'Unknown';
   const uniqueIps = new Set(clicks.map((c) => c.ip_address)).size;
 
   const requestSort = (key) => {
@@ -428,19 +437,55 @@ const LinkAnalytics = () => {
 
       {/* Clicks log table */}
       <GlassCard>
-        <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>
-          Click Log
-          <span style={{ marginLeft: '10px', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '400' }}>
-            (last {clicks.length})
-          </span>
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: '600' }}>Detailed Click Logs</h2>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <input
+              type="text"
+              placeholder="Filter IP..."
+              value={ipFilter}
+              onChange={(e) => { setIpFilter(e.target.value); setCurrentPage(1); }}
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontSize: '13px',
+                color: '#fff',
+                width: '140px'
+              }}
+            />
+            <select
+              value={countryFilter}
+              onChange={(e) => { setCountryFilter(e.target.value); setCurrentPage(1); }}
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontSize: '13px',
+                color: '#fff',
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              <option value="" style={{ background: '#1e293b', color: '#fff' }}>All Countries</option>
+              {stats?.top_countries?.map(c => (
+                <option
+                  key={c.country || 'null'}
+                  value={c.country || 'null'}
+                  style={{ background: '#1e293b', color: '#fff' }}
+                >
+                  {c.country || 'Unknown'}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {loadingClicks ? (
           <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>Loading…</div>
-        ) : clicks.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)', fontSize: '14px' }}>
-            No clicks recorded yet.
-          </div>
-        ) : (
+        ) : clicks.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
@@ -493,6 +538,50 @@ const LinkAnalytics = () => {
                 ))}
               </tbody>
             </table>
+
+            {(totalClicks > CLICKS_PER_PAGE || currentPage > 1) && (
+              <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Showing {Math.min(totalClicks, (currentPage - 1) * CLICKS_PER_PAGE + 1)}-{Math.min(totalClicks, currentPage * CLICKS_PER_PAGE)} of {totalClicks}
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: currentPage === 1 ? 'rgba(255,255,255,0.2)' : '#fff',
+                      cursor: currentPage === 1 ? 'default' : 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    disabled={currentPage * CLICKS_PER_PAGE >= totalClicks}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: currentPage * CLICKS_PER_PAGE >= totalClicks ? 'rgba(255,255,255,0.2)' : '#fff',
+                      cursor: currentPage * CLICKS_PER_PAGE >= totalClicks ? 'default' : 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+            No matching logs found.
           </div>
         )}
       </GlassCard>
