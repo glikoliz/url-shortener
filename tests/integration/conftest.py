@@ -7,8 +7,8 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from testcontainers.core.container import DockerContainer
 from testcontainers.postgres import PostgresContainer
-from testcontainers.redis import RedisContainer
 
 from app.database import Base, get_db
 from app.main import app
@@ -25,7 +25,7 @@ def postgres_url():
 
 @pytest.fixture(scope="session")
 def redis_url():
-    with RedisContainer("redis:7-alpine") as redis:
+    with DockerContainer("redis:7-alpine").with_exposed_ports(6379) as redis:
         yield f"redis://{redis.get_container_host_ip()}:{redis.get_exposed_port(6379)}/0"
 
 
