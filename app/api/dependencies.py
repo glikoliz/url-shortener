@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService, oauth2_scheme
+from app.services.link_service import LinkService
 
 
 async def get_current_user(
@@ -25,3 +26,11 @@ async def get_current_user(
             detail="User account is deactivated",
         )
     return user
+
+
+def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
+    return AuthService(db)
+
+
+def get_link_service(db: AsyncSession = Depends(get_db)) -> LinkService:
+    return LinkService(db)

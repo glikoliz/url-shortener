@@ -4,14 +4,12 @@ import string
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from fastapi import Depends, HTTPException, status
+from fastapi import HTTPException, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database import get_db
 from app.models.link import Link
-from app.redis import get_redis
 from app.repositories.link_repository import LinkRepository
 from app.services.cache_service import CacheService
 
@@ -288,9 +286,3 @@ def _link_to_dict(link: Link) -> dict:
         "created_at": link.created_at,
         "expires_at": link.expires_at,
     }
-
-
-async def get_link_service(
-    db: AsyncSession = Depends(get_db), redis: Redis | None = Depends(get_redis)
-) -> LinkService:
-    return LinkService(db, redis)

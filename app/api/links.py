@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import RedirectResponse
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, get_link_service
 from app.limiter import RateLimiter
 from app.models.user import User
 from app.schemas.click import (
@@ -9,7 +9,7 @@ from app.schemas.click import (
     PaginatedClickResponse,
 )
 from app.schemas.link import LinkCreate, LinkResponse
-from app.services.link_service import LinkService, get_link_service
+from app.services.link_service import LinkService
 
 router = APIRouter()
 redirect_router = APIRouter()
