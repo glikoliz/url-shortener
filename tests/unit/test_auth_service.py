@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 
 from app.api.dependencies import get_current_user
 from app.models.user import User
+from app.schemas.user import TokenResponse
 from app.services.auth_service import AuthService, pwd_context
 
 
@@ -39,9 +40,10 @@ async def test_login_success(auth_service, mock_user):
     user = mock_user(id=42, password_hash=hashed)
     auth_service.user_repo.get_by_email.return_value = user
 
-    token = await auth_service.login("test@example.com", password)
+    token_response = await auth_service.login("test@example.com", password)
 
-    assert isinstance(token, str)
+    assert isinstance(token_response, TokenResponse)
+    assert isinstance(token_response.access_token, str)
 
 
 @pytest.mark.asyncio
