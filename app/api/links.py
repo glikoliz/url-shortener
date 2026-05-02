@@ -1,18 +1,15 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
-from app.database import get_db
 from app.limiter import RateLimiter
 from app.models.user import User
-from app.redis import get_redis
 from app.schemas.click import (
     ClickStatsResponse,
     PaginatedClickResponse,
 )
 from app.schemas.link import LinkCreate, LinkResponse
-from app.services.link_service import LinkService
+from app.services.link_service import LinkService, get_link_service
 
 router = APIRouter()
 redirect_router = APIRouter()
@@ -26,11 +23,9 @@ redirect_router = APIRouter()
 )
 async def create_short_link(
     body: LinkCreate,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    redis=Depends(get_redis),
+    service: LinkService = Depends(get_link_service),
 ):
-    service = LinkService(db, redis)
     result = await service.shorten_url(
         original_url=str(body.original_url),
         user_id=current_user.id,
@@ -42,21 +37,18 @@ async def create_short_link(
 
 @router.get("", response_model=list[LinkResponse])
 async def get_user_links(
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    redis=Depends(get_redis),
+    service: LinkService = Depends(get_link_service),
 ):
-    service = LinkService(db, redis)
     return await service.get_user_links(current_user.id)
 
 
 @router.get("/{short_code}", response_model=LinkResponse)
 async def get_link_info(
     short_code: str,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    service: LinkService = Depends(get_link_service),
 ):
-    service = LinkService(db)
     return await service.get_stats(short_code, current_user.id)
 
 
@@ -67,11 +59,9 @@ async def get_link_clicks(
     limit: int = 50,
     ip: str | None = None,
     country: str | None = None,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    redis=Depends(get_redis),
+    service: LinkService = Depends(get_link_service),
 ):
-    service = LinkService(db, redis)
     return await service.get_clicks(
         short_code, current_user.id, skip=skip, limit=limit, ip=ip, country=country
     )
@@ -81,11 +71,9 @@ async def get_link_clicks(
 async def get_link_stats(
     short_code: str,
     granularity: str | None = None,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    redis=Depends(get_redis),
+    service: LinkService = Depends(get_link_service),
 ):
-    service = LinkService(db, redis)
     return await service.get_click_stats(
         short_code, current_user.id, granularity=granularity
     )
@@ -94,11 +82,9 @@ async def get_link_stats(
 @router.delete("/{short_code}", status_code=204)
 async def delete_link(
     short_code: str,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    redis=Depends(get_redis),
+    service: LinkService = Depends(get_link_service),
 ):
-    service = LinkService(db, redis)
     await service.delete_link(short_code, user_id=current_user.id)
 
 
@@ -109,10 +95,8 @@ async def redirect_to_original(
     short_code: str,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
-    redis=Depends(get_redis),
+    service: LinkService = Depends(get_link_service),
 ):
-    service = LinkService(db, redis)
     original_url = await service.resolve_link(short_code)
 
     ip = request.client.host if request.client else None

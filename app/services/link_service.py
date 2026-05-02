@@ -1,16 +1,21 @@
+import logging
 import secrets
 import string
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import get_db
 from app.models.link import Link
+from app.redis import get_redis
 from app.repositories.link_repository import LinkRepository
 from app.services.cache_service import CacheService
+
+logger = logging.getLogger(__name__)
 
 
 def _generate_short_code(length: int = 6) -> str:
@@ -22,11 +27,11 @@ async def _resolve_final_url(url: str) -> str:
     try:
         async with httpx.AsyncClient(
             follow_redirects=True,
-            timeout=3.0,
-            max_redirects=5,
+            timeout=2.0,
+            max_redirects=3,
             headers={"User-Agent": "URLShortener/1.0"},
         ) as client:
-            response = await client.get(url)
+            response = await client.head(url)
             return str(response.url)
     except Exception:
         return url
@@ -92,6 +97,7 @@ class LinkService:
             expires_at=expires_at,
         )
         link = await self.link_repo.create(link)
+        logger.info(f"URL shortened: {original_url} -> {short_code} (user: {user_id})")
 
         if self.cache:
             await self.cache.set_url(
@@ -119,6 +125,7 @@ class LinkService:
                 short_code, link.original_url, expires_at=link.expires_at
             )
 
+        logger.info(f"Link resolved: {short_code} -> {link.original_url}")
         return link.original_url
 
     async def count_click(
@@ -205,7 +212,6 @@ class LinkService:
     async def get_click_stats(
         self, short_code: str, user_id: int, granularity: str | None = None
     ):
-        # 1. Сначала проверяем кэш
         cache_key = f"stats:{short_code}:{granularity}"
         if self.redis:
             cached_data = await self.redis.get(cache_key)
@@ -214,11 +220,8 @@ class LinkService:
 
                 result = json.loads(cached_data)
                 if result.get("owner_id") == user_id:
-                    print(f"DEBUG: Cache HIT for stats:{short_code}")
                     return result["data"]
 
-        print(f"DEBUG: Cache MISS for stats:{short_code}")
-        # 2. Если в кэше нет — идем в базу
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
@@ -229,7 +232,6 @@ class LinkService:
         stats = await click_repo.get_aggregated_stats(link.id, granularity=granularity)
         stats["total_clicks"] = link.clicks
 
-        # 3. Сохраняем в кэш
         if self.redis:
             import json
 
@@ -286,3 +288,9 @@ def _link_to_dict(link: Link) -> dict:
         "created_at": link.created_at,
         "expires_at": link.expires_at,
     }
+
+
+async def get_link_service(
+    db: AsyncSession = Depends(get_db), redis: Redis | None = Depends(get_redis)
+) -> LinkService:
+    return LinkService(db, redis)
