@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import GlassCard from './GlassCard';
 import { apiClient } from '../api/client';
-import { Trash2, Copy, ExternalLink, Calendar, Link2, Check } from 'lucide-react';
+import { Trash2, Copy, ExternalLink, Check, BarChart2 } from 'lucide-react';
 
 const LinksTable = ({ links, isLoading, onDelete }) => {
   const [copiedCode, setCopiedCode] = useState(null);
+  const navigate = useNavigate();
 
   const handleDelete = async (shortCode) => {
     if (!window.confirm('Are you sure you want to delete this link?')) return;
@@ -94,6 +96,21 @@ const LinksTable = ({ links, isLoading, onDelete }) => {
                       title="Copy"
                     >
                       {copiedCode === link.short_code ? <Check size={16} /> : <Copy size={16} />}
+                    </button>
+                    <button
+                      onClick={() => navigate(`/links/${link.short_code}/analytics`)}
+                      style={{
+                        padding: '6px',
+                        background: 'rgba(106,0,255,0.1)',
+                        borderRadius: '6px',
+                        color: '#8a33ff',
+                        transition: 'all 0.2s'
+                      }}
+                      title="Analytics"
+                      onMouseOver={e => e.currentTarget.style.background = 'rgba(106,0,255,0.2)'}
+                      onMouseOut={e => e.currentTarget.style.background = 'rgba(106,0,255,0.1)'}
+                    >
+                      <BarChart2 size={16} />
                     </button>
                     <button
                       onClick={() => handleDelete(link.short_code)}

@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import DashboardLayout from './layouts/DashboardLayout';
 import Dashboard from './pages/Dashboard';
+import LinkAnalytics from './pages/LinkAnalytics';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -33,6 +34,7 @@ function App() {
         }
       >
         <Route index element={<Dashboard />} />
+        <Route path="links/:code/analytics" element={<LinkAnalytics />} />
       </Route>
     </Routes>
   );
