@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
@@ -10,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.repositories.user_repository import UserRepository
+from app.schemas.user import TokenResponse, UserRegisterResponse
+
+logger = logging.getLogger(__name__)
 
 pwd_context = PasswordHash((BcryptHasher(),))
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -19,7 +23,7 @@ class AuthService:
     def __init__(self, db: AsyncSession) -> None:
         self.user_repo = UserRepository(db)
 
-    async def register(self, email: str, password: str):
+    async def register(self, email: str, password: str) -> UserRegisterResponse:
         existing = await self.user_repo.get_by_email(email)
         if existing:
             raise HTTPException(
@@ -27,16 +31,19 @@ class AuthService:
                 detail="Email already registered",
             )
         password_hash = pwd_context.hash(password)
-        return await self.user_repo.create(email=email, password_hash=password_hash)
+        user = await self.user_repo.create(email=email, password_hash=password_hash)
+        logger.info(f"New user registered: {email}")
+        return UserRegisterResponse.model_validate(user)
 
-    async def login(self, email: str, password: str) -> str:
+    async def login(self, email: str, password: str) -> TokenResponse:
         user = await self.user_repo.get_by_email(email)
         if not user or not pwd_context.verify(password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
             )
-        return self._create_token(user.id)
+        token = self._create_token(user.id)
+        return TokenResponse(access_token=token)
 
     @staticmethod
     def _create_token(user_id: int) -> str:

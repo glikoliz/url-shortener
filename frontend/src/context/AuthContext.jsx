@@ -25,6 +25,7 @@ export const AuthProvider = ({ children }) => {
     setToken(data.access_token);
     setUser({ token: data.access_token });
     localStorage.setItem('token', data.access_token);
+    localStorage.removeItem('user');
     return data;
   };
 
@@ -40,6 +41,7 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
   };
 
   return (

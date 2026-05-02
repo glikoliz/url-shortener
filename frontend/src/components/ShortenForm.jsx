@@ -158,6 +158,9 @@ const ShortenForm = ({ onShortened }) => {
                 placeholder="e.g. my-campaign"
                 value={customCode}
                 onChange={e => setCustomCode(e.target.value)}
+                maxLength={20}
+                pattern="^[a-zA-Z0-9-_]+$"
+                title="Only letters, numbers, dashes and underscores are allowed"
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -174,6 +177,7 @@ const ShortenForm = ({ onShortened }) => {
               <input
                 type="number"
                 min="1"
+                max="365"
                 placeholder="30"
                 value={ttlDays}
                 onChange={e => setTtlDays(e.target.value)}

@@ -30,5 +30,5 @@ async def login(
     form: OAuth2PasswordRequestForm = Depends(),
     service: AuthService = Depends(get_auth_service),
 ):
-    token = await service.login(email=form.username, password=form.password)
-    return TokenResponse(access_token=token)
+    result = await service.login(email=form.username, password=form.password)
+    return result
