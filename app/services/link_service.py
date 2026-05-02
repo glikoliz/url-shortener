@@ -161,14 +161,16 @@ class LinkService:
         click_repo = ClickRepository(self.link_repo.db)
         return await click_repo.get_by_link_id(link.id)
 
-    async def get_click_stats(self, short_code: str, user_id: int):
+    async def get_click_stats(
+        self, short_code: str, user_id: int, granularity: str | None = None
+    ):
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
         from app.repositories.click_repository import ClickRepository
 
         click_repo = ClickRepository(self.link_repo.db)
-        stats = await click_repo.get_aggregated_stats(link.id)
+        stats = await click_repo.get_aggregated_stats(link.id, granularity=granularity)
         stats["total_clicks"] = link.clicks
         return stats
 

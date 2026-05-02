@@ -148,11 +148,13 @@ const LinkAnalytics = () => {
   const [loadingClicks, setLoadingClicks] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'clicked_at', direction: 'desc' });
+  const [selectedGranularity, setSelectedGranularity] = useState(null);
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (gran = selectedGranularity) => {
     try {
+      const statsUrl = gran ? `/links/${code}/stats?granularity=${gran}` : `/links/${code}/stats`;
       const [s, c] = await Promise.all([
-        apiClient(`/links/${code}/stats`),
+        apiClient(statsUrl),
         apiClient(`/links/${code}/clicks`),
       ]);
       setStats(s);
@@ -164,7 +166,7 @@ const LinkAnalytics = () => {
       setLoadingClicks(false);
       setRefreshing(false);
     }
-  }, [code]);
+  }, [code, selectedGranularity]);
 
   useEffect(() => {
     const initFetch = async () => {
@@ -197,8 +199,8 @@ const LinkAnalytics = () => {
         let bVal = b[sortConfig.key] || '';
 
         if (sortConfig.key === 'user_agent') {
-            aVal = parseUa(aVal);
-            bVal = parseUa(bVal);
+          aVal = parseUa(aVal);
+          bVal = parseUa(bVal);
         }
 
         if (aVal < bVal) {
@@ -292,9 +294,36 @@ const LinkAnalytics = () => {
 
       {/* Clicks over time chart */}
       <GlassCard style={{ marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '20px' }}>
-          Clicks over Time
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: '600' }}>Clicks over Time</h2>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {['day', 'hour', 'minute'].map((g) => (
+              <button
+                key={g}
+                onClick={() => setSelectedGranularity(g === selectedGranularity ? null : g)}
+                style={{
+                  fontSize: '11px',
+                  background: selectedGranularity === g ? 'var(--accent-color)' : 'rgba(255,255,255,0.05)',
+                  color: selectedGranularity === g ? '#000' : 'var(--text-secondary)',
+                  border: 'none',
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: selectedGranularity === g ? '600' : '400',
+                  transition: 'all 0.2s',
+                  textTransform: 'capitalize'
+                }}
+              >
+                {g}
+              </button>
+            ))}
+            {stats?.granularity && !selectedGranularity && (
+              <span style={{ fontSize: '11px', color: 'var(--accent-color)', opacity: 0.8, marginLeft: '8px', fontStyle: 'italic' }}>
+                Auto: {stats.granularity}
+              </span>
+            )}
+          </div>
+        </div>
         {loadingStats ? (
           <div style={{ height: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
             Loading…
@@ -318,6 +347,7 @@ const LinkAnalytics = () => {
                 stroke="var(--accent-color)"
                 strokeWidth={2}
                 fill="url(#clicksGrad)"
+                animationDuration={600}
               />
             </AreaChart>
           </ResponsiveContainer>

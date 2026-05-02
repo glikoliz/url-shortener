@@ -71,12 +71,15 @@ async def get_link_clicks(
 @router.get("/{short_code}/stats", response_model=ClickStatsResponse)
 async def get_link_stats(
     short_code: str,
+    granularity: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     redis=Depends(get_redis),
 ):
     service = LinkService(db, redis)
-    return await service.get_click_stats(short_code, current_user.id)
+    return await service.get_click_stats(
+        short_code, current_user.id, granularity=granularity
+    )
 
 
 @router.delete("/{short_code}", status_code=204)

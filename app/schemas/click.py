@@ -16,6 +16,8 @@ class ClickEventResponse(BaseModel):
 
 class ClickStatsResponse(BaseModel):
     total_clicks: int
+    granularity: str
+    clicks_over_time: list[dict]
     clicks_by_day: list[dict]
     top_referers: list[dict]
     top_countries: list[dict]
