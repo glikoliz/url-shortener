@@ -2,6 +2,8 @@ import os
 
 os.environ["TESTCONTAINERS_RYUK_DISABLED"] = "true"
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -13,6 +15,15 @@ from testcontainers.postgres import PostgresContainer
 from app.database import Base, get_db
 from app.main import app
 from app.redis import get_redis
+
+
+@pytest.fixture(autouse=True)
+def mock_resolve_url():
+    with patch(
+        "app.services.link_service._resolve_final_url", new_callable=AsyncMock
+    ) as m:
+        m.side_effect = lambda url: url if url.endswith("/") else url + "/"
+        yield m
 
 
 @pytest.fixture(scope="session")
