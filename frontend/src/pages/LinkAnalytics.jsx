@@ -64,7 +64,7 @@ const CustomTooltip = ({ active, payload, label }) => {
       }}
     >
       <p style={{ color: 'var(--text-secondary)', marginBottom: '4px' }}>{label}</p>
-      <p style={{ color: '#6a00ff', fontWeight: 600 }}>{payload[0].value} clicks</p>
+      <p style={{ color: 'var(--accent-color)', fontWeight: 600 }}>{payload[0].value} clicks</p>
     </div>
   );
 };
@@ -212,7 +212,7 @@ const LinkAnalytics = () => {
 
   const getSortIcon = (key) => {
     if (sortConfig.key !== key) return <ArrowUpDown size={14} style={{ opacity: 0.3 }} />;
-    return sortConfig.direction === 'asc' ? <ChevronUp size={14} color="#8a33ff" /> : <ChevronDown size={14} color="#8a33ff" />;
+    return sortConfig.direction === 'asc' ? <ChevronUp size={14} color="var(--accent-color)" /> : <ChevronDown size={14} color="var(--accent-color)" />;
   };
 
   return (
@@ -242,7 +242,7 @@ const LinkAnalytics = () => {
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: '22px', fontWeight: '700' }}>
             Analytics —{' '}
-            <span style={{ color: '#6a00ff' }}>{code}</span>
+            <span style={{ color: 'var(--accent-color)' }}>{code}</span>
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
             Click statistics for your short link
@@ -253,11 +253,11 @@ const LinkAnalytics = () => {
           onClick={handleRefresh}
           disabled={refreshing}
           style={{
-            background: 'rgba(106,0,255,0.15)',
-            border: '1px solid rgba(106,0,255,0.3)',
+            background: 'rgba(56,189,248,0.1)',
+            border: '1px solid rgba(56,189,248,0.2)',
             borderRadius: '10px',
             padding: '8px 14px',
-            color: '#8a33ff',
+            color: 'var(--accent-color)',
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
@@ -281,9 +281,9 @@ const LinkAnalytics = () => {
             marginBottom: '28px',
           }}
         >
-          <StatCard icon={MousePointerClick} label="Total Clicks" value={stats.total_clicks} color="#6a00ff" />
-          <StatCard icon={Globe} label="Unique IPs" value={uniqueIps} color="#00d4ff" />
-          <StatCard icon={Link2} label="Top Country" value={topCountry} color="#00ff88" />
+          <StatCard icon={MousePointerClick} label="Total Clicks" value={stats.total_clicks} color="var(--accent-color)" />
+          <StatCard icon={Globe} label="Unique IPs" value={uniqueIps} color="#60a5fa" />
+          <StatCard icon={Link2} label="Top Country" value={topCountry} color="#34d399" />
         </div>
       )}
 
@@ -301,8 +301,8 @@ const LinkAnalytics = () => {
             <AreaChart data={stats.clicks_by_day} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="clicksGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6a00ff" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#6a00ff" stopOpacity={0} />
+                  <stop offset="5%" stopColor="var(--accent-color)" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="var(--accent-color)" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -312,7 +312,7 @@ const LinkAnalytics = () => {
               <Area
                 type="monotone"
                 dataKey="clicks"
-                stroke="#6a00ff"
+                stroke="var(--accent-color)"
                 strokeWidth={2}
                 fill="url(#clicksGrad)"
               />
@@ -350,7 +350,7 @@ const LinkAnalytics = () => {
                   formatter={(v) => [v, 'clicks']}
                   contentStyle={{ background: 'rgba(11,12,16,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '13px' }}
                 />
-                <Bar dataKey="clicks" fill="#00d4ff" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="clicks" fill="#60a5fa" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -382,7 +382,7 @@ const LinkAnalytics = () => {
                   formatter={(v) => [v, 'clicks']}
                   contentStyle={{ background: 'rgba(11,12,16,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '13px' }}
                 />
-                <Bar dataKey="clicks" fill="#00ff88" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="clicks" fill="#34d399" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (

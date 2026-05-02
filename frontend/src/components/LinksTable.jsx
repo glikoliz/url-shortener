@@ -83,49 +83,51 @@ const LinksTable = ({ links, isLoading, onDelete }) => {
                   {new Date(link.created_at).toLocaleDateString()}
                 </td>
                 <td style={{ padding: '16px', textAlign: 'right' }}>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                     <button
                       onClick={() => handleCopy(link.short_url, link.short_code)}
                       style={{
-                        padding: '6px',
+                        padding: '8px',
                         background: 'rgba(255,255,255,0.05)',
-                        borderRadius: '6px',
-                        color: copiedCode === link.short_code ? '#00ff88' : 'var(--text-secondary)',
+                        borderRadius: '8px',
+                        color: copiedCode === link.short_code ? '#10b981' : 'var(--text-secondary)',
                         transition: 'all 0.2s'
                       }}
                       title="Copy"
+                      onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                      onMouseOut={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                     >
-                      {copiedCode === link.short_code ? <Check size={16} /> : <Copy size={16} />}
+                      {copiedCode === link.short_code ? <Check size={18} /> : <Copy size={18} />}
                     </button>
                     <button
                       onClick={() => navigate(`/links/${link.short_code}/analytics`)}
                       style={{
-                        padding: '6px',
-                        background: 'rgba(106,0,255,0.1)',
-                        borderRadius: '6px',
-                        color: '#8a33ff',
+                        padding: '8px',
+                        background: 'rgba(56,189,248,0.1)',
+                        borderRadius: '8px',
+                        color: 'var(--accent-color)',
                         transition: 'all 0.2s'
                       }}
                       title="Analytics"
-                      onMouseOver={e => e.currentTarget.style.background = 'rgba(106,0,255,0.2)'}
-                      onMouseOut={e => e.currentTarget.style.background = 'rgba(106,0,255,0.1)'}
+                      onMouseOver={e => e.currentTarget.style.background = 'rgba(56,189,248,0.2)'}
+                      onMouseOut={e => e.currentTarget.style.background = 'rgba(56,189,248,0.1)'}
                     >
-                      <BarChart2 size={16} />
+                      <BarChart2 size={18} />
                     </button>
                     <button
                       onClick={() => handleDelete(link.short_code)}
                       style={{
-                        padding: '6px',
-                        background: 'rgba(255,51,102,0.1)',
-                        borderRadius: '6px',
+                        padding: '8px',
+                        background: 'rgba(244,63,94,0.1)',
+                        borderRadius: '8px',
                         color: 'var(--error-color)',
                         transition: 'all 0.2s'
                       }}
                       title="Delete"
-                      onMouseOver={e => e.currentTarget.style.background = 'rgba(255,51,102,0.2)'}
-                      onMouseOut={e => e.currentTarget.style.background = 'rgba(255,51,102,0.1)'}
+                      onMouseOver={e => e.currentTarget.style.background = 'rgba(244,63,94,0.2)'}
+                      onMouseOut={e => e.currentTarget.style.background = 'rgba(244,63,94,0.1)'}
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={18} />
                     </button>
                   </div>
                 </td>
