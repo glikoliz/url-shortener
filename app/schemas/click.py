@@ -16,8 +16,13 @@ class ClickEventResponse(BaseModel):
 
 class ClickStatsResponse(BaseModel):
     total_clicks: int
-    granularity: str
+    granularity: str | None
     clicks_over_time: list[dict]
     clicks_by_day: list[dict]
     top_referers: list[dict]
     top_countries: list[dict]
+
+
+class PaginatedClickResponse(BaseModel):
+    items: list[ClickEventResponse]
+    total: int

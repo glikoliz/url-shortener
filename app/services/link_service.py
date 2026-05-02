@@ -35,6 +35,7 @@ async def _resolve_final_url(url: str) -> str:
 class LinkService:
     def __init__(self, db: AsyncSession, redis: Redis | None = None) -> None:
         self.link_repo = LinkRepository(db)
+        self.redis = redis
         self.cache = CacheService(redis) if redis else None
 
     async def shorten_url(
@@ -152,26 +153,89 @@ class LinkService:
             "short_url": f"{settings.base_url}/s/{link.short_code}",
         }
 
-    async def get_clicks(self, short_code: str, user_id: int):
+    async def get_clicks(
+        self,
+        short_code: str,
+        user_id: int,
+        skip: int = 0,
+        limit: int = 50,
+        ip: str | None = None,
+        country: str | None = None,
+    ):
+        cache_key = f"clicks:{short_code}:{skip}:{limit}:{ip}:{country}"
+        if self.redis:
+            cached_data = await self.redis.get(cache_key)
+            if cached_data:
+                import json
+
+                result = json.loads(cached_data)
+                if result.get("owner_id") == user_id:
+                    return result["data"]
+
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
+
         from app.repositories.click_repository import ClickRepository
 
         click_repo = ClickRepository(self.link_repo.db)
-        return await click_repo.get_by_link_id(link.id)
+        items, total = await click_repo.get_by_link_id(
+            link.id, skip=skip, limit=limit, ip=ip, country=country
+        )
+
+        response_data = {"items": items, "total": total}
+
+        if self.redis:
+            import json
+
+            from app.schemas.click import ClickEventResponse
+
+            items_dict = [
+                ClickEventResponse.model_validate(i).model_dump(mode="json")
+                for i in items
+            ]
+            cache_payload = {
+                "owner_id": link.user_id,
+                "data": {"items": items_dict, "total": total},
+            }
+            await self.redis.set(cache_key, json.dumps(cache_payload), ex=10)
+
+        return response_data
 
     async def get_click_stats(
         self, short_code: str, user_id: int, granularity: str | None = None
     ):
+        # 1. Сначала проверяем кэш
+        cache_key = f"stats:{short_code}:{granularity}"
+        if self.redis:
+            cached_data = await self.redis.get(cache_key)
+            if cached_data:
+                import json
+
+                result = json.loads(cached_data)
+                if result.get("owner_id") == user_id:
+                    print(f"DEBUG: Cache HIT for stats:{short_code}")
+                    return result["data"]
+
+        print(f"DEBUG: Cache MISS for stats:{short_code}")
+        # 2. Если в кэше нет — идем в базу
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
+
         from app.repositories.click_repository import ClickRepository
 
         click_repo = ClickRepository(self.link_repo.db)
         stats = await click_repo.get_aggregated_stats(link.id, granularity=granularity)
         stats["total_clicks"] = link.clicks
+
+        # 3. Сохраняем в кэш
+        if self.redis:
+            import json
+
+            cache_payload = {"owner_id": link.user_id, "data": stats}
+            await self.redis.set(cache_key, json.dumps(cache_payload), ex=30)
+
         return stats
 
     async def get_user_links(self, user_id: int):

@@ -7,7 +7,10 @@ from app.database import get_db
 from app.limiter import RateLimiter
 from app.models.user import User
 from app.redis import get_redis
-from app.schemas.click import ClickEventResponse, ClickStatsResponse
+from app.schemas.click import (
+    ClickStatsResponse,
+    PaginatedClickResponse,
+)
 from app.schemas.link import LinkCreate, LinkResponse
 from app.services.link_service import LinkService
 
@@ -57,15 +60,21 @@ async def get_link_info(
     return await service.get_stats(short_code, current_user.id)
 
 
-@router.get("/{short_code}/clicks", response_model=list[ClickEventResponse])
+@router.get("/{short_code}/clicks", response_model=PaginatedClickResponse)
 async def get_link_clicks(
     short_code: str,
+    skip: int = 0,
+    limit: int = 50,
+    ip: str | None = None,
+    country: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     redis=Depends(get_redis),
 ):
     service = LinkService(db, redis)
-    return await service.get_clicks(short_code, current_user.id)
+    return await service.get_clicks(
+        short_code, current_user.id, skip=skip, limit=limit, ip=ip, country=country
+    )
 
 
 @router.get("/{short_code}/stats", response_model=ClickStatsResponse)
