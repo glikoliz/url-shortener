@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
+    from app.models.click_event import ClickEvent
     from app.models.user import User
 
 
@@ -30,3 +31,6 @@ class Link(Base):
     clicks: Mapped[int] = mapped_column(default=text("0"), server_default=text("0"))
 
     user: Mapped["User"] = relationship(back_populates="links")
+    click_events: Mapped[list["ClickEvent"]] = relationship(
+        back_populates="link", cascade="all, delete-orphan"
+    )
