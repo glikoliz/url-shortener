@@ -272,6 +272,23 @@ async def test_delete_link_invalidates_cache(link_service, mock_link, mock_redis
 
 
 @pytest.mark.asyncio
+async def test_shorten_url_indirect_self_reference(link_service, mock_resolve_url):
+    from app.config import settings
+
+    mock_resolve_url.side_effect = None
+    mock_resolve_url.return_value = f"{settings.base_url}/s/xyz"
+
+    with pytest.raises(HTTPException) as exc_info:
+        await link_service.shorten_url(
+            original_url="https://evil-proxy.com/redirect",
+            user_id=1,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "pointing to this service" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
 async def test_shorten_url_self_redirect(link_service):
     with pytest.raises(HTTPException) as exc_info:
         await link_service.shorten_url(
@@ -280,4 +297,4 @@ async def test_shorten_url_self_redirect(link_service):
         )
 
     assert exc_info.value.status_code == 400
-    assert "Cannot shorten URLs pointing to this service" in exc_info.value.detail
+    assert "already a short link" in exc_info.value.detail

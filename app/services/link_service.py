@@ -44,6 +44,12 @@ class LinkService:
         custom_code: str | None = None,
         ttl_minutes: int | None = None,
     ):
+        if str(original_url).startswith(settings.base_url):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This URL is already a short link from our service",
+            )
+
         final_url = await _resolve_final_url(original_url)
 
         if final_url.startswith(settings.base_url):
