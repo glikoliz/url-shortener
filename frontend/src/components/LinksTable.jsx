@@ -8,7 +8,7 @@ const LinksTable = ({ links, isLoading, onDelete }) => {
 
   const handleDelete = async (shortCode) => {
     if (!window.confirm('Are you sure you want to delete this link?')) return;
-    
+
     try {
       await apiClient(`/links/${shortCode}`, { method: 'DELETE' });
       if (onDelete) onDelete();
@@ -48,7 +48,7 @@ const LinksTable = ({ links, isLoading, onDelete }) => {
   return (
     <GlassCard>
       <h2 style={{ fontSize: '20px', marginBottom: '20px' }}>Your Links</h2>
-      
+
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>

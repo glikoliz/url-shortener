@@ -20,7 +20,7 @@
 body {
   font-family: 'Inter', sans-serif;
   background-color: var(--bg-color);
-  background-image: 
+  background-image:
     radial-gradient(circle at 15% 50%, rgba(106, 0, 255, 0.15), transparent 25%),
     radial-gradient(circle at 85% 30%, rgba(0, 212, 255, 0.1), transparent 25%);
   color: var(--text-primary);

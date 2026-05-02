@@ -46,7 +46,7 @@ const Dashboard = () => {
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      
+
       {/* Top Section: Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
         <GlassCard style={{ padding: '24px' }}>
@@ -79,7 +79,7 @@ const Dashboard = () => {
 
       {/* Bottom Section: Links Table */}
       <LinksTable links={links} isLoading={isLoading} onDelete={handleDeleted} />
-      
+
     </div>
   );
 };

@@ -34,10 +34,10 @@ const DashboardLayout = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
             padding: '6px 12px',
             background: 'rgba(0,0,0,0.2)',
             borderRadius: '20px',
@@ -46,8 +46,8 @@ const DashboardLayout = () => {
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00ff88' }}></div>
             <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Online</span>
           </div>
-          
-          <button 
+
+          <button
             onClick={logout}
             style={{
               display: 'flex',
@@ -74,8 +74,8 @@ const DashboardLayout = () => {
         </div>
       </header>
 
-      <main style={{ 
-        flex: 1, 
+      <main style={{
+        flex: 1,
         padding: '40px 20px',
         maxWidth: '1200px',
         width: '100%',

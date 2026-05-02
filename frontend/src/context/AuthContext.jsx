@@ -11,7 +11,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (token) {
       localStorage.setItem('token', token);
-      setUser({ token }); 
+      setUser({ token });
     } else {
       localStorage.removeItem('token');
       setUser(null);
@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
       body: formData,
       method: 'POST',
     });
-    
+
     setToken(data.access_token);
     return data;
   };
