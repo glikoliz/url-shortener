@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import GlassCard from './GlassCard';
 import { apiClient } from '../api/client';
 import { Link2, Sparkles, Settings2, Copy, Check } from 'lucide-react';

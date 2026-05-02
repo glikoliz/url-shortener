@@ -23,16 +23,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install dependencies
-        run: uv pip install --system -r requirements.txt
       - name: Lint
         run: |
-          ruff check .
-          ruff format --check .
+          uv run ruff check .
+          uv run ruff format --check .
       - name: Run Tests
         env:
           JWT_SECRET: ci_test_secret
-        run: pytest --cov=app tests/
+        run: uv run pytest --cov=app tests/
 
   frontend:
     name: Frontend CI

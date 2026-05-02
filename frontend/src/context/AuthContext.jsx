@@ -1,23 +1,16 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState } from 'react';
 import { apiClient } from '../api/client';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (token) {
-      localStorage.setItem('token', token);
-      setUser({ token });
-    } else {
-      localStorage.removeItem('token');
-      setUser(null);
-    }
-    setLoading(false);
-  }, [token]);
+  const [token, setToken] = useState(() => localStorage.getItem('token'));
+  const [user, setUser] = useState(() => {
+    const t = localStorage.getItem('token');
+    return t ? { token: t } : null;
+  });
+  const [loading] = useState(false);
 
   const login = async (username, password) => {
     const formData = new FormData();
@@ -30,6 +23,8 @@ export const AuthProvider = ({ children }) => {
     });
 
     setToken(data.access_token);
+    setUser({ token: data.access_token });
+    localStorage.setItem('token', data.access_token);
     return data;
   };
 
@@ -43,6 +38,8 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     setToken(null);
+    setUser(null);
+    localStorage.removeItem('token');
   };
 
   return (

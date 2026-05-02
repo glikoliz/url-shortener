@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import GlassCard from '../components/GlassCard';
 import { BarChart3, Link as LinkIcon } from 'lucide-react';
 import ShortenForm from '../components/ShortenForm';
@@ -29,7 +29,11 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    fetchLinks(true);
+    const initFetch = async () => {
+      await fetchLinks(true);
+    };
+    initFetch();
+
     const interval = setInterval(() => {
       fetchLinks(false);
     }, 3000); // 3 seconds polling for real-time clicks

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from './GlassCard';
 import { apiClient } from '../api/client';
@@ -14,7 +14,7 @@ const LinksTable = ({ links, isLoading, onDelete }) => {
     try {
       await apiClient(`/links/${shortCode}`, { method: 'DELETE' });
       if (onDelete) onDelete();
-    } catch (err) {
+    } catch {
       alert('Failed to delete link');
     }
   };

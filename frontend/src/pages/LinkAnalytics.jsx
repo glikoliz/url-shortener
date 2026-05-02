@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   AreaChart,
   Area,
@@ -167,7 +167,10 @@ const LinkAnalytics = () => {
   }, [code]);
 
   useEffect(() => {
-    fetchAll();
+    const initFetch = async () => {
+      await fetchAll();
+    };
+    initFetch();
   }, [fetchAll]);
 
   const handleRefresh = () => {
