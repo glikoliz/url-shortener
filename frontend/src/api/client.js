@@ -34,8 +34,8 @@ export const apiClient = async (endpoint, { body, ...customConfig } = {}) => {
     return data;
   }
 
-  // Auto logout on 401
-  if (response.status === 401) {
+  // Auto logout on 401 (but not during login)
+  if (response.status === 401 && !endpoint.includes('/auth/login')) {
     localStorage.removeItem('token');
     window.location.reload();
   }
