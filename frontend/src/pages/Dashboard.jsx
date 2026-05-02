@@ -1,10 +1,36 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import GlassCard from '../components/GlassCard';
 import { BarChart3, Link as LinkIcon } from 'lucide-react';
-
 import ShortenForm from '../components/ShortenForm';
+import LinksTable from '../components/LinksTable';
+import { apiClient } from '../api/client';
 
 const Dashboard = () => {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [stats, setStats] = useState({ totalLinks: '--', totalClicks: '--' });
+
+  const fetchStats = async () => {
+    try {
+      const data = await apiClient('/links');
+      if (data) {
+        setStats({
+          totalLinks: data.length,
+          totalClicks: data.reduce((acc, link) => acc + link.clicks, 0)
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch stats", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, [refreshTrigger]);
+
+  const handleShortened = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
+
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
       
@@ -17,7 +43,7 @@ const Dashboard = () => {
             </div>
             <div>
               <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '4px' }}>Total Links</p>
-              <h3 style={{ fontSize: '28px', fontWeight: '700', margin: 0 }}>--</h3>
+              <h3 style={{ fontSize: '28px', fontWeight: '700', margin: 0 }}>{stats.totalLinks}</h3>
             </div>
           </div>
         </GlassCard>
@@ -29,30 +55,17 @@ const Dashboard = () => {
             </div>
             <div>
               <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '4px' }}>Total Clicks</p>
-              <h3 style={{ fontSize: '28px', fontWeight: '700', margin: 0 }}>--</h3>
+              <h3 style={{ fontSize: '28px', fontWeight: '700', margin: 0 }}>{stats.totalClicks}</h3>
             </div>
           </div>
         </GlassCard>
       </div>
 
       {/* Middle Section: Shorten Form */}
-      <ShortenForm />
+      <ShortenForm onShortened={handleShortened} />
 
-      {/* Bottom Section: Links Table Placeholder (Step 5) */}
-      <GlassCard>
-        <h2 style={{ fontSize: '20px', marginBottom: '16px' }}>Your Links</h2>
-        <div style={{ 
-          height: '200px', 
-          border: '1px dashed var(--glass-border)', 
-          borderRadius: '8px', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          color: 'var(--text-secondary)'
-        }}>
-          Links Table (Coming in Step 5)
-        </div>
-      </GlassCard>
+      {/* Bottom Section: Links Table */}
+      <LinksTable refreshTrigger={refreshTrigger} />
       
     </div>
   );

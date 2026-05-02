@@ -20,6 +20,12 @@ class LinkRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_user_id(self, user_id: int) -> list[Link]:
+        result = await self.db.execute(
+            select(Link).where(Link.user_id == user_id).order_by(Link.created_at.desc())
+        )
+        return list(result.scalars().all())
+
     async def delete(self, link: Link) -> None:
         await self.db.delete(link)
         await self.db.commit()

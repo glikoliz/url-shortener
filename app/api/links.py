@@ -36,6 +36,16 @@ async def create_short_link(
     return result
 
 
+@router.get("", response_model=list[LinkResponse])
+async def get_user_links(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    redis=Depends(get_redis),
+):
+    service = LinkService(db, redis)
+    return await service.get_user_links(current_user.id)
+
+
 @router.get("/{short_code}", response_model=LinkResponse)
 async def get_link_info(
     short_code: str,

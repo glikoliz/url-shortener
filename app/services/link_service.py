@@ -100,6 +100,16 @@ class LinkService:
             "short_url": f"{settings.base_url}/s/{link.short_code}",
         }
 
+    async def get_user_links(self, user_id: int):
+        links = await self.link_repo.get_by_user_id(user_id)
+        return [
+            {
+                **_link_to_dict(link),
+                "short_url": f"{settings.base_url}/s/{link.short_code}",
+            }
+            for link in links
+        ]
+
     async def delete_link(self, short_code: str, user_id: int) -> None:
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
