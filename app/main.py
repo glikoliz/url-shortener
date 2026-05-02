@@ -2,8 +2,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import auth, links
@@ -37,6 +39,25 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(links.router, prefix="/api/v1/links", tags=["links"])
 app.include_router(links.redirect_router, tags=["redirect"])
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request, exc):
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "Resource already exists or constraint violated"},
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_error_handler(request, exc):
+    import logging
+
+    logging.getLogger("app.main").error(f"Unhandled error: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
 
 
 @app.get("/")
