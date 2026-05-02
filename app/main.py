@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import auth, links
+from app.config import settings
 from app.database import engine, get_db
 from app.limiter import limiter_manager
 from app.redis import close_redis, get_redis, init_redis
@@ -28,7 +29,7 @@ app = FastAPI(title="URL Shortener API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
