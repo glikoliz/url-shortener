@@ -3,34 +3,15 @@ import GlassCard from './GlassCard';
 import { apiClient } from '../api/client';
 import { Trash2, Copy, ExternalLink, Calendar, Link2, Check } from 'lucide-react';
 
-const LinksTable = ({ refreshTrigger }) => {
-  const [links, setLinks] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+const LinksTable = ({ links, isLoading, onDelete }) => {
   const [copiedCode, setCopiedCode] = useState(null);
-
-  const fetchLinks = async () => {
-    setIsLoading(true);
-    try {
-      const data = await apiClient('/links');
-      setLinks(data || []);
-    } catch (err) {
-      setError('Failed to load your links');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLinks();
-  }, [refreshTrigger]);
 
   const handleDelete = async (shortCode) => {
     if (!window.confirm('Are you sure you want to delete this link?')) return;
     
     try {
       await apiClient(`/links/${shortCode}`, { method: 'DELETE' });
-      setLinks(links.filter(link => link.short_code !== shortCode));
+      if (onDelete) onDelete();
     } catch (err) {
       alert('Failed to delete link');
     }
@@ -42,23 +23,12 @@ const LinksTable = ({ refreshTrigger }) => {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  if (isLoading) {
+  if (isLoading && links.length === 0) {
     return (
       <GlassCard>
         <h2 style={{ fontSize: '20px', marginBottom: '16px' }}>Your Links</h2>
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
           Loading your links...
-        </div>
-      </GlassCard>
-    );
-  }
-
-  if (error) {
-    return (
-      <GlassCard>
-        <h2 style={{ fontSize: '20px', marginBottom: '16px' }}>Your Links</h2>
-        <div style={{ color: 'var(--error-color)', textAlign: 'center', padding: '20px' }}>
-          {error}
         </div>
       </GlassCard>
     );

@@ -6,29 +6,42 @@ import LinksTable from '../components/LinksTable';
 import { apiClient } from '../api/client';
 
 const Dashboard = () => {
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [links, setLinks] = useState([]);
   const [stats, setStats] = useState({ totalLinks: '--', totalClicks: '--' });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const fetchStats = async () => {
+  const fetchLinks = async (showLoading = false) => {
+    if (showLoading) setIsLoading(true);
     try {
       const data = await apiClient('/links');
       if (data) {
+        setLinks(data);
         setStats({
           totalLinks: data.length,
           totalClicks: data.reduce((acc, link) => acc + link.clicks, 0)
         });
       }
     } catch (err) {
-      console.error("Failed to fetch stats", err);
+      console.error("Failed to fetch links", err);
+    } finally {
+      if (showLoading) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchStats();
-  }, [refreshTrigger]);
+    fetchLinks(true);
+    const interval = setInterval(() => {
+      fetchLinks(false);
+    }, 3000); // 3 seconds polling for real-time clicks
+    return () => clearInterval(interval);
+  }, []);
 
   const handleShortened = () => {
-    setRefreshTrigger(prev => prev + 1);
+    fetchLinks(false);
+  };
+
+  const handleDeleted = () => {
+    fetchLinks(false);
   };
 
   return (
@@ -65,7 +78,7 @@ const Dashboard = () => {
       <ShortenForm onShortened={handleShortened} />
 
       {/* Bottom Section: Links Table */}
-      <LinksTable refreshTrigger={refreshTrigger} />
+      <LinksTable links={links} isLoading={isLoading} onDelete={handleDeleted} />
       
     </div>
   );
