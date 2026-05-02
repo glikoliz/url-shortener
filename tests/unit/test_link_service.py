@@ -5,6 +5,15 @@ import pytest
 from fastapi import HTTPException
 
 
+@pytest.fixture(autouse=True)
+def mock_resolve_url():
+    with patch(
+        "app.services.link_service._resolve_final_url", new_callable=AsyncMock
+    ) as m:
+        m.side_effect = lambda url: url
+        yield m
+
+
 @pytest.mark.asyncio
 async def test_shorten_url_auto_code(link_service, mock_link):
     created_link = mock_link(short_code="AbC123")
