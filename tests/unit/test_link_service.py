@@ -151,7 +151,9 @@ async def test_get_click_stats(link_service, mock_link):
 
         assert result["total_clicks"] == 5
         assert "clicks_by_day" in result
-        mock_repo_inst.get_aggregated_stats.assert_awaited_once_with(1)
+        mock_repo_inst.get_aggregated_stats.assert_awaited_once_with(
+            1, granularity=None
+        )
 
 
 @pytest.mark.asyncio
@@ -180,7 +182,7 @@ async def test_get_stats_success(link_service, mock_link):
     link = mock_link(clicks=42, short_code="test01")
     link_service.link_repo.get_by_code.return_value = link
 
-    result = await link_service.get_stats("test01")
+    result = await link_service.get_stats("test1", user_id=1)
 
     assert result["clicks"] == 42
 
@@ -190,7 +192,7 @@ async def test_get_stats_not_found(link_service):
     link_service.link_repo.get_by_code.return_value = None
 
     with pytest.raises(HTTPException) as exc_info:
-        await link_service.get_stats("nonexistent")
+        await link_service.get_stats("notfound", user_id=1)
 
     assert exc_info.value.status_code == 404
 

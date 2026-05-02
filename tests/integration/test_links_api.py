@@ -87,7 +87,10 @@ async def test_get_link_stats(client):
     await client.get("/s/stats1", follow_redirects=False)
     await client.get("/s/stats1", follow_redirects=False)
 
-    response = await client.get("/api/v1/links/stats1")
+    response = await client.get(
+        "/api/v1/links/stats1",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert response.status_code == 200
     assert response.json()["clicks"] == 2
 
@@ -113,6 +116,8 @@ async def test_get_link_detailed_stats(client):
     data = response.json()
     assert data["total_clicks"] >= 1
     assert "clicks_by_day" in data
+    assert "clicks_over_time" in data
+    assert "granularity" in data
     assert "top_referers" in data
     assert "top_countries" in data
 
@@ -157,7 +162,10 @@ async def test_delete_link(client):
     )
     assert delete_response.status_code == 204
 
-    get_response = await client.get("/api/v1/links/del01")
+    get_response = await client.get(
+        "/api/v1/links/del01",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert get_response.status_code == 404
 
 
