@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from fastapi import HTTPException, status
 from redis.asyncio import Redis
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -63,37 +64,58 @@ class LinkService:
                     "(even through redirects)"
                 ),
             )
-        if custom_code:
-            existing = await self.link_repo.get_by_code(custom_code)
-            if existing:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Custom short code already taken",
-                )
-            short_code = custom_code
-        else:
-            # Generate unique code, retry on collision
-            for _ in range(10):
-                short_code = _generate_short_code()
-                if not await self.link_repo.get_by_code(short_code):
-                    break
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to generate unique short code",
-                )
-
         expires_at = None
         if ttl_minutes:
             expires_at = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
 
-        link = Link(
-            user_id=user_id,
-            original_url=final_url,
-            short_code=short_code,
-            expires_at=expires_at,
-        )
-        link = await self.link_repo.create(link)
+        max_retries = 5
+        for attempt in range(max_retries):
+            if custom_code:
+                short_code = custom_code
+                if await self.link_repo.get_by_code(short_code):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Custom short code already taken",
+                    )
+            else:
+                short_code = _generate_short_code()
+                if await self.link_repo.get_by_code(short_code):
+                    continue
+
+            link = Link(
+                user_id=user_id,
+                original_url=final_url,
+                short_code=short_code,
+                expires_at=expires_at,
+            )
+
+            try:
+                link = await self.link_repo.create(link)
+                break
+            except IntegrityError:
+                if custom_code:
+                    # If custom code was taken between our check and create
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Custom short code already taken",
+                    )
+                # For auto-generated code, just retry if not last attempt
+                if attempt == max_retries - 1:
+                    logger.error(
+                        "Failed to generate unique short code after max retries"
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to generate unique short code",
+                    )
+                continue
+        else:
+            # Should not happen due to break, but for safety
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create link",
+            )
+
         logger.info(f"URL shortened: {original_url} -> {short_code} (user: {user_id})")
 
         return {
