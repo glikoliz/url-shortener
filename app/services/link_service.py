@@ -159,16 +159,6 @@ class LinkService:
         ip: str | None = None,
         country: str | None = None,
     ):
-        cache_key = f"clicks:{short_code}:{skip}:{limit}:{ip}:{country}"
-        if self.cache.redis:
-            cached_data = await self.cache.redis.get(cache_key)
-            if cached_data:
-                import json
-
-                result = json.loads(cached_data)
-                if result.get("owner_id") == user_id:
-                    return result["data"]
-
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
@@ -180,38 +170,11 @@ class LinkService:
             link.id, skip=skip, limit=limit, ip=ip, country=country
         )
 
-        response_data = {"items": items, "total": total}
-
-        if self.cache.redis:
-            import json
-
-            from app.schemas.click import ClickEventResponse
-
-            items_dict = [
-                ClickEventResponse.model_validate(i).model_dump(mode="json")
-                for i in items
-            ]
-            cache_payload = {
-                "owner_id": link.user_id,
-                "data": {"items": items_dict, "total": total},
-            }
-            await self.cache.redis.set(cache_key, json.dumps(cache_payload), ex=10)
-
-        return response_data
+        return {"items": items, "total": total}
 
     async def get_click_stats(
         self, short_code: str, user_id: int, granularity: str | None = None
     ):
-        cache_key = f"stats:{short_code}:{granularity}"
-        if self.cache.redis:
-            cached_data = await self.cache.redis.get(cache_key)
-            if cached_data:
-                import json
-
-                result = json.loads(cached_data)
-                if result.get("owner_id") == user_id:
-                    return result["data"]
-
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
@@ -221,12 +184,6 @@ class LinkService:
         click_repo = ClickRepository(self.link_repo.db)
         stats = await click_repo.get_aggregated_stats(link.id, granularity=granularity)
         stats["total_clicks"] = link.clicks
-
-        if self.cache.redis:
-            import json
-
-            cache_payload = {"owner_id": link.user_id, "data": stats}
-            await self.cache.redis.set(cache_key, json.dumps(cache_payload), ex=30)
 
         return stats
 
@@ -248,8 +205,7 @@ class LinkService:
                 detail="You can only delete your own links",
             )
         await self.link_repo.delete(link)
-        if self.cache:
-            await self.cache.delete_url(short_code)
+        await self.cache.delete_url(short_code)
 
     async def _get_link_or_404(self, short_code: str) -> Link:
         link = await self.link_repo.get_by_code(short_code)
