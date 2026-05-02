@@ -141,9 +141,10 @@ async def test_get_link_clicks(client):
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) >= 1
-    assert "ip_address" in data[0]
-    assert "user_agent" in data[0]
+    assert "items" in data
+    assert len(data["items"]) >= 1
+    assert "ip_address" in data["items"][0]
+    assert "user_agent" in data["items"][0]
 
 
 @pytest.mark.asyncio

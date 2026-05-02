@@ -128,12 +128,14 @@ async def test_get_clicks(link_service, mock_link):
 
     with patch("app.repositories.click_repository.ClickRepository") as MockClickRepo:
         mock_repo_inst = MockClickRepo.return_value
-        mock_repo_inst.get_by_link_id = AsyncMock(return_value=[])
+        mock_repo_inst.get_by_link_id = AsyncMock(return_value=([], 0))
 
         result = await link_service.get_clicks("test1", user_id=1)
 
-        assert result == []
-        mock_repo_inst.get_by_link_id.assert_awaited_once_with(1)
+        assert result == {"items": [], "total": 0}
+        mock_repo_inst.get_by_link_id.assert_awaited_once_with(
+            1, skip=0, limit=50, ip=None, country=None
+        )
 
 
 @pytest.mark.asyncio
