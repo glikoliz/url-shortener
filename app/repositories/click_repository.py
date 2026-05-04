@@ -119,6 +119,15 @@ class ClickRepository:
             .limit(20)
         )
 
+        # Total clicks and Unique clicks summary
+        summary_query = select(
+            func.count().label("total"),
+            func.count().filter(ClickEvent.is_unique.is_(True)).label("unique"),
+        ).where(ClickEvent.link_id == link_id)
+
+        summary_result = await self.db.execute(summary_query)
+        summary = summary_result.one()
+
         clicks_result = await self.db.execute(clicks_query)
         referers_result = await self.db.execute(referers_query)
         countries_result = await self.db.execute(countries_query)
@@ -129,6 +138,8 @@ class ClickRepository:
         ]
 
         return {
+            "total_clicks": summary.total,
+            "unique_clicks": summary.unique,
             "clicks_over_time": clicks_over_time,
             "clicks_by_day": clicks_over_time,
             "granularity": granularity,

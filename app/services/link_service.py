@@ -172,11 +172,27 @@ class LinkService:
             from app.repositories.click_repository import ClickRepository
 
             click_repo = ClickRepository(self.link_repo.db)
+
+            # Check for uniqueness in Redis (24h window)
+            is_unique = True
+            if ip:
+                from app.redis import get_redis
+
+                redis = await get_redis()
+                unique_key = f"unique:link:{link.id}:ip:{ip}"
+                # Try to set a key that expires in 24h. If it exists, it's not unique.
+                already_exists = await redis.get(unique_key)
+                if already_exists:
+                    is_unique = False
+                else:
+                    await redis.set(unique_key, "1", ex=86400)
+
             event = ClickEvent(
                 link_id=link.id,
                 ip_address=ip[:45] if ip else None,
                 user_agent=user_agent[:512] if user_agent else None,
                 referer=referer[:2048] if referer else None,
+                is_unique=is_unique,
             )
             await click_repo.create(event)
             await self.link_repo.increment_clicks_by_code(short_code)

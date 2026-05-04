@@ -125,7 +125,22 @@ const ClickRow = ({ click }) => (
       {click.referer || 'Direct'}
     </td>
     <td style={{ padding: '12px 16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-      {click.country || 'Unknown'}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {click.country || 'Unknown'}
+        {click.is_unique && (
+          <span style={{
+            fontSize: '10px',
+            background: 'rgba(16, 185, 129, 0.1)',
+            color: '#10b981',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontWeight: '600',
+            border: '1px solid rgba(16, 185, 129, 0.2)'
+          }}>
+            UNIQUE
+          </span>
+        )}
+      </div>
     </td>
   </tr>
 );
@@ -140,6 +155,7 @@ const LinkAnalytics = () => {
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingClicks, setLoadingClicks] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null); // 'not_found' | 'forbidden' | 'other'
   const [sortConfig, setSortConfig] = useState({ key: 'clicked_at', direction: 'desc' });
   const [selectedGranularity, setSelectedGranularity] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -161,8 +177,16 @@ const LinkAnalytics = () => {
       setStats(s);
       setClicks(cData.items);
       setTotalClicks(cData.total);
-    } catch {
-      /* handled by apiClient */
+      setError(null);
+    } catch (err) {
+      console.error("Analytics fetch failed:", err);
+      if (err.message.includes('Not your link') || err.message.includes('Forbidden')) {
+        setError('forbidden');
+      } else if (err.message.includes('not found')) {
+        setError('not_found');
+      } else {
+        setError('other');
+      }
     } finally {
       setLoadingStats(false);
       setLoadingClicks(false);
@@ -229,6 +253,69 @@ const LinkAnalytics = () => {
     if (sortConfig.key !== key) return <ArrowUpDown size={14} style={{ opacity: 0.3 }} />;
     return sortConfig.direction === 'asc' ? <ChevronUp size={14} color="var(--accent-color)" /> : <ChevronDown size={14} color="var(--accent-color)" />;
   };
+
+  if (error === 'forbidden') {
+    return (
+      <div style={{ padding: '60px 20px', display: 'flex', justifyContent: 'center' }} className="animate-fade-in">
+        <GlassCard style={{ maxWidth: '500px', width: '100%', textAlign: 'center', padding: '48px 32px' }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            background: 'rgba(244, 63, 94, 0.1)',
+            borderRadius: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 24px'
+          }}>
+            <div style={{ color: 'var(--error-color)' }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </div>
+          </div>
+          <h1 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '12px' }}>Access Denied</h1>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '32px', lineHeight: '1.6' }}>
+            You don't have permission to view analytics for this link. Only the creator of the link can access its detailed statistics.
+          </p>
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              background: 'var(--accent-gradient)',
+              color: '#000',
+              border: 'none',
+              padding: '12px 24px',
+              borderRadius: '12px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'transform 0.2s'
+            }}
+            onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+            onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            <ArrowLeft size={18} /> Back to Dashboard
+          </button>
+        </GlassCard>
+      </div>
+    );
+  }
+
+  if (error === 'not_found') {
+     return (
+      <div style={{ padding: '60px 20px', display: 'flex', justifyContent: 'center' }} className="animate-fade-in">
+        <GlassCard style={{ maxWidth: '500px', width: '100%', textAlign: 'center', padding: '48px 32px' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '12px' }}>Link Not Found</h1>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>
+            The link you are looking for does not exist or has been deleted.
+          </p>
+          <button onClick={() => navigate('/')} className="btn-primary">Back to Dashboard</button>
+        </GlassCard>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '32px', maxWidth: '1100px', margin: '0 auto' }} className="animate-fade-in">
@@ -298,6 +385,7 @@ const LinkAnalytics = () => {
           }}
         >
           <StatCard icon={MousePointerClick} label="Total Clicks" value={stats.total_clicks} color="var(--accent-color)" />
+          <StatCard icon={MousePointerClick} label="Unique Clicks" value={stats.unique_clicks} color="#fbbf24" />
           <StatCard icon={Globe} label="Unique IPs" value={uniqueIps} color="#60a5fa" />
           <StatCard icon={Link2} label="Top Country" value={topCountry} color="#34d399" />
         </div>
