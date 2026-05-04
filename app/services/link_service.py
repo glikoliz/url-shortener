@@ -10,8 +10,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.click_event import ClickEvent
 from app.models.link import Link
-from app.redis import publish_link_update, subscribe_to_user_updates
+from app.redis import get_redis, publish_link_update, subscribe_to_user_updates
+from app.repositories.click_repository import ClickRepository
 from app.repositories.link_repository import LinkRepository
 from app.services.cache_service import CacheService
 
@@ -100,12 +102,10 @@ class LinkService:
                 break
             except IntegrityError:
                 if custom_code:
-                    # If custom code was taken between our check and create
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
                         detail="Custom short code already taken",
                     )
-                # For auto-generated code, just retry if not last attempt
                 if attempt == max_retries - 1:
                     logger.error(
                         "Failed to generate unique short code after max retries"
@@ -116,7 +116,6 @@ class LinkService:
                     )
                 continue
         else:
-            # Should not happen due to break, but for safety
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create link",
@@ -124,7 +123,6 @@ class LinkService:
 
         logger.info(f"URL shortened: {original_url} -> {short_code} (user: {user_id})")
 
-        # Publish SSE event
         await publish_link_update(
             user_id,
             {
@@ -168,24 +166,15 @@ class LinkService:
         """Increment click counter and record detailed analytics event."""
         link = await self.link_repo.get_by_code(short_code)
         if link:
-            from app.models.click_event import ClickEvent
-            from app.repositories.click_repository import ClickRepository
-
             click_repo = ClickRepository(self.link_repo.db)
 
-            # Check for uniqueness in Redis (24h window)
             is_unique = True
             if ip:
-                from app.redis import get_redis
-
                 redis = await get_redis()
                 unique_key = f"unique:link:{link.id}:ip:{ip}"
-                # Try to set a key that expires in 24h. If it exists, it's not unique.
-                already_exists = await redis.get(unique_key)
-                if already_exists:
+                was_set = await redis.set(unique_key, "1", ex=86400, nx=True)
+                if not was_set:
                     is_unique = False
-                else:
-                    await redis.set(unique_key, "1", ex=86400)
 
             event = ClickEvent(
                 link_id=link.id,
@@ -195,19 +184,18 @@ class LinkService:
                 is_unique=is_unique,
             )
             await click_repo.create(event)
-            await self.link_repo.increment_clicks_by_code(short_code)
 
-            # Fetch updated link to get current click count and user_id for SSE
-            updated_link = await self.link_repo.get_by_code(short_code)
-            if updated_link:
-                await publish_link_update(
-                    updated_link.user_id,
-                    {
-                        "type": "link_updated",
-                        "short_code": short_code,
-                        "clicks": updated_link.clicks,
-                    },
-                )
+            new_click_count = await self.link_repo.increment_clicks_by_code(short_code)
+
+            # Notify UI via SSE
+            await publish_link_update(
+                link.user_id,
+                {
+                    "type": "link_updated",
+                    "short_code": short_code,
+                    "clicks": new_click_count,
+                },
+            )
 
     async def get_stats(self, short_code: str, user_id: int):
         link = await self._get_link_or_404(short_code)

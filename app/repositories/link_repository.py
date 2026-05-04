@@ -30,17 +30,23 @@ class LinkRepository:
         await self.db.delete(link)
         await self.db.commit()
 
-    async def increment_clicks(self, link_id: int) -> None:
-        await self.db.execute(
-            update(Link).where(Link.id == link_id).values(clicks=Link.clicks + 1)
+    async def increment_clicks(self, link_id: int) -> int:
+        result = await self.db.execute(
+            update(Link)
+            .where(Link.id == link_id)
+            .values(clicks=Link.clicks + 1)
+            .returning(Link.clicks)
         )
         await self.db.commit()
+        return result.scalar_one()
 
-    async def increment_clicks_by_code(self, short_code: str) -> None:
+    async def increment_clicks_by_code(self, short_code: str) -> int:
         """Used in background tasks where only short_code is available."""
-        await self.db.execute(
+        result = await self.db.execute(
             update(Link)
             .where(Link.short_code == short_code)
             .values(clicks=Link.clicks + 1)
+            .returning(Link.clicks)
         )
         await self.db.commit()
+        return result.scalar_one()
