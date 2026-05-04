@@ -16,6 +16,7 @@ import { apiClient } from '../api/client';
 import GlassCard from '../components/GlassCard';
 import LiveIndicator from '../components/LiveIndicator';
 import { useSSE } from '../hooks/useSSE';
+import { useDebounce } from '../hooks/useDebounce';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LinkStats, ClicksResponse, SSEEvent, Click } from '../types';
 
@@ -168,6 +169,9 @@ const LinkAnalytics = () => {
   const [countryFilter, setCountryFilter] = useState('');
   const CLICKS_PER_PAGE = 25;
 
+  const debouncedIp = useDebounce(ipFilter, 500);
+  const debouncedCountry = useDebounce(countryFilter, 500);
+
   // Stats Query
   const {
     data: stats,
@@ -189,8 +193,8 @@ const LinkAnalytics = () => {
     isError: isClicksError,
     error: clicksError
   } = useQuery<ClicksResponse>({
-    queryKey: ['linkClicks', code, currentPage, ipFilter, countryFilter],
-    queryFn: () => apiClient(`/links/i/${code}/clicks?limit=${CLICKS_PER_PAGE}&skip=${skip}&ip=${ipFilter}&country=${countryFilter}`),
+    queryKey: ['linkClicks', code, currentPage, debouncedIp, debouncedCountry],
+    queryFn: () => apiClient(`/links/i/${code}/clicks?limit=${CLICKS_PER_PAGE}&skip=${skip}&ip=${debouncedIp}&country=${debouncedCountry}`),
     enabled: !!code,
     retry: false,
   });

@@ -1,30 +1,29 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiClient } from '../api/client';
 import type { SSEEvent } from '../types';
 
 export const useSSE = (onEvent: (data: SSEEvent) => void) => {
-  const { token, logout } = useAuth();
+  const { user, logout } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(false);
   const onEventRef = useRef<(data: SSEEvent) => void>(onEvent);
 
-  // Update ref when onEvent changes to avoid effect re-runs
   useEffect(() => {
     onEventRef.current = onEvent;
   }, [onEvent]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
 
     let eventSource: EventSource | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const connect = () => {
       const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000/api/v1';
-      const currentToken = localStorage.getItem('token') || token;
-      const url = `${API_URL}/links/events/stream?token=${encodeURIComponent(currentToken)}`;
+      const url = `${API_URL}/links/events/stream`;
 
-      eventSource = new EventSource(url);
+      eventSource = new EventSource(url, { withCredentials: true });
 
       eventSource.onopen = () => {
         setIsConnected(true);
@@ -43,11 +42,17 @@ export const useSSE = (onEvent: (data: SSEEvent) => void) => {
         }
       };
 
-      eventSource.onerror = () => {
+      eventSource.onerror = async () => {
         setIsConnected(false);
-        if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+        try {
+          await apiClient('/auth/me');
+          if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+            setError(true);
+            reconnectTimeout = setTimeout(connect, 3000);
+          }
+        } catch (err) {
+          console.log('SSE stop retry: session invalid');
           setError(true);
-          reconnectTimeout = setTimeout(connect, 3000);
         }
       };
     };
@@ -58,7 +63,7 @@ export const useSSE = (onEvent: (data: SSEEvent) => void) => {
       if (eventSource) eventSource.close();
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
-  }, [token, logout]);
+  }, [user, logout]);
 
   return { isConnected, error };
 };

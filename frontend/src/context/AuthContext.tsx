@@ -4,22 +4,29 @@ import type { User } from '../types';
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<any>;
   register: (email: string, password: string) => Promise<any>;
   logout: () => void;
+  checkAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
-  const [user, setUser] = useState<User | null>(() => {
-    const t = localStorage.getItem('token');
-    return t ? { token: t } : null;
-  });
-  const [loading] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const checkAuth = async () => {
+    try {
+      const userData = await apiClient('/auth/me');
+      setUser(userData);
+    } catch {
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const login = async (email: string, password: string) => {
     const formData = new FormData();
@@ -31,10 +38,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       method: 'POST',
     });
 
-    setToken(data.access_token);
-    setUser({ token: data.access_token });
-    localStorage.setItem('token', data.access_token);
-    localStorage.setItem('refreshToken', data.refresh_token);
+    await checkAuth();
     return data;
   };
 
@@ -46,34 +50,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return data;
   };
 
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
+  const logout = async () => {
+    try {
+      await apiClient('/auth/logout', { method: 'POST' });
+    } finally {
+      setUser(null);
+      window.location.href = '/login';
+    }
   };
 
   useEffect(() => {
-    const handleStorageChange = () => {
-      const newToken = localStorage.getItem('token');
-      if (newToken !== token) {
-        setToken(newToken);
-        setUser(newToken ? { token: newToken } : null);
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    const interval = setInterval(handleStorageChange, 2000);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
-    };
-  }, [token]);
+    checkAuth();
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, checkAuth }}>
       {children}
     </AuthContext.Provider>
   );

@@ -6,7 +6,7 @@ class UserRegister(BaseModel):
     password: str = Field(min_length=6, max_length=128)
 
 
-class UserRegisterResponse(BaseModel):
+class UserResponse(BaseModel):
     id: int
     email: str
 
@@ -17,3 +17,7 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class MessageResponse(BaseModel):
+    message: str

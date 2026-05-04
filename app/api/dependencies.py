@@ -1,18 +1,31 @@
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Cookie, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
-from app.services.auth_service import AuthService, oauth2_scheme
+from app.services.auth_service import AuthService
 from app.services.link_service import LinkService
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    access_token: str | None = Cookie(None),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    user_id = AuthService.verify_token(token)
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
+    try:
+        user_id = AuthService.verify_token(access_token)
+    except HTTPException:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+
     user_repo = UserRepository(db)
     user = await user_repo.get_by_id(user_id)
     if not user:
@@ -36,5 +49,14 @@ def get_link_service(db: AsyncSession = Depends(get_db)) -> LinkService:
     return LinkService(db)
 
 
-def get_user_id_from_token(token: str = Query(...)) -> int:
-    return AuthService.verify_token(token)
+def get_user_id_from_token(
+    access_token: str | None = Cookie(None),
+    token: str | None = Query(None),
+) -> int:
+    token_to_verify = access_token or token
+    if not token_to_verify:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token missing",
+        )
+    return AuthService.verify_token(token_to_verify)

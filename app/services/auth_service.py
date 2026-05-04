@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.refresh_token import RefreshToken
 from app.repositories.user_repository import UserRepository
-from app.schemas.user import TokenResponse, UserRegisterResponse
+from app.schemas.user import TokenResponse, UserResponse
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class AuthService:
     def __init__(self, db: AsyncSession) -> None:
         self.user_repo = UserRepository(db)
 
-    async def register(self, email: str, password: str) -> UserRegisterResponse:
+    async def register(self, email: str, password: str) -> UserResponse:
         existing = await self.user_repo.get_by_email(email)
         if existing:
             raise HTTPException(
@@ -35,7 +35,7 @@ class AuthService:
         password_hash = pwd_context.hash(password)
         user = await self.user_repo.create(email=email, password_hash=password_hash)
         logger.info(f"New user registered: {email}")
-        return UserRegisterResponse.model_validate(user)
+        return UserResponse.model_validate(user)
 
     async def login(self, email: str, password: str) -> TokenResponse:
         user = await self.user_repo.get_by_email(email)
