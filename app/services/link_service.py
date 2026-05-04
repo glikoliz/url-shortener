@@ -1,3 +1,4 @@
+import json
 import logging
 import secrets
 import string
@@ -15,6 +16,7 @@ from app.models.link import Link
 from app.redis import get_redis, publish_link_update, subscribe_to_user_updates
 from app.repositories.click_repository import ClickRepository
 from app.repositories.link_repository import LinkRepository
+from app.schemas.click import ClickStatsResponse, PaginatedClickResponse
 from app.schemas.link import LinkResponse
 from app.services.cache_service import CacheService
 
@@ -41,9 +43,16 @@ async def _resolve_final_url(url: str) -> str:
 
 
 class LinkService:
-    def __init__(self, db: AsyncSession, redis: Redis | None = None) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        redis: Redis | None = None,
+        link_repo: LinkRepository | None = None,
+        click_repo: ClickRepository | None = None,
+    ) -> None:
         self.db = db
-        self.link_repo = LinkRepository(db)
+        self.link_repo = link_repo or LinkRepository(db)
+        self.click_repo = click_repo or ClickRepository(db)
         self.cache = CacheService(redis)
 
     async def shorten_url(
@@ -127,15 +136,17 @@ class LinkService:
 
         logger.info(f"URL shortened: {original_url} -> {short_code} (user: {user_id})")
 
+        response_data = LinkResponse.model_validate(link).model_dump(mode="json")
+
         await publish_link_update(
             user_id,
             {
                 "type": "link_created",
-                "link": LinkResponse.model_validate(link).model_dump(mode="json"),
+                "link": response_data,
             },
         )
 
-        return LinkResponse.model_validate(link).model_dump(mode="json")
+        return response_data
 
     async def resolve_link(self, short_code: str) -> str:
         # Cache hit: Redis TTL handles expiration — zero DB queries
@@ -164,8 +175,6 @@ class LinkService:
         """Increment click counter and record detailed analytics event."""
         link = await self.link_repo.get_by_code(short_code)
         if link:
-            click_repo = ClickRepository(self.link_repo.db)
-
             is_unique = True
             if ip:
                 redis = await get_redis()
@@ -181,7 +190,7 @@ class LinkService:
                 referer=referer[:2048] if referer else None,
                 is_unique=is_unique,
             )
-            await click_repo.create(event)
+            await self.click_repo.create(event)
             new_click_count = await self.link_repo.increment_clicks_by_code(short_code)
             await self.db.commit()
 
@@ -214,14 +223,11 @@ class LinkService:
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
 
-        from app.repositories.click_repository import ClickRepository
-
-        click_repo = ClickRepository(self.link_repo.db)
-        items, total = await click_repo.get_by_link_id(
+        items, total = await self.click_repo.get_by_link_id(
             link.id, skip=skip, limit=limit, ip=ip, country=country
         )
 
-        return {"items": items, "total": total}
+        return PaginatedClickResponse(items=items, total=total).model_dump(mode="json")
 
     async def get_click_stats(
         self, short_code: str, user_id: int, granularity: str | None = None
@@ -230,13 +236,12 @@ class LinkService:
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
 
-        from app.repositories.click_repository import ClickRepository
-
-        click_repo = ClickRepository(self.link_repo.db)
-        stats = await click_repo.get_aggregated_stats(link.id, granularity=granularity)
+        stats = await self.click_repo.get_aggregated_stats(
+            link.id, granularity=granularity
+        )
         stats["total_clicks"] = link.clicks
 
-        return stats
+        return ClickStatsResponse.model_validate(stats).model_dump(mode="json")
 
     async def get_user_links(self, user_id: int):
         links = await self.link_repo.get_by_user_id(user_id)
@@ -246,7 +251,6 @@ class LinkService:
 
     async def get_updates_stream(self, user_id: int):
         """Generate SSE events from Redis Pub/Sub."""
-        import json
 
         pubsub = await subscribe_to_user_updates(user_id)
         try:

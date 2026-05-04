@@ -108,15 +108,11 @@ async def test_count_click(link_service, mock_link):
     link_service.link_repo.get_by_code.return_value = link
 
     with (
-        patch("app.services.link_service.ClickRepository") as MockClickRepo,
         patch("app.services.link_service.get_redis") as mock_get_redis,
         patch("app.services.link_service.publish_link_update") as mock_publish,
     ):
         mock_redis = AsyncMock()
         mock_get_redis.return_value = mock_redis
-
-        mock_repo_inst = MockClickRepo.return_value
-        mock_repo_inst.create = AsyncMock()
 
         link_service.link_repo.increment_clicks_by_code.return_value = 1
 
@@ -127,7 +123,7 @@ async def test_count_click(link_service, mock_link):
         link_service.link_repo.increment_clicks_by_code.assert_awaited_once_with(
             "abc123"
         )
-        mock_repo_inst.create.assert_awaited_once()
+        link_service.click_repo.create.assert_awaited_once()
         mock_publish.assert_awaited_once()
 
 
@@ -135,17 +131,15 @@ async def test_count_click(link_service, mock_link):
 async def test_get_clicks(link_service, mock_link):
     link = mock_link(id=1, user_id=1, short_code="test1")
     link_service.link_repo.get_by_code.return_value = link
+    link_service.click_repo.get_by_link_id.return_value = ([], 0)
 
-    with patch("app.repositories.click_repository.ClickRepository") as MockClickRepo:
-        mock_repo_inst = MockClickRepo.return_value
-        mock_repo_inst.get_by_link_id = AsyncMock(return_value=([], 0))
+    result = await link_service.get_clicks("test1", user_id=1)
 
-        result = await link_service.get_clicks("test1", user_id=1)
-
-        assert result == {"items": [], "total": 0}
-        mock_repo_inst.get_by_link_id.assert_awaited_once_with(
-            1, skip=0, limit=50, ip=None, country=None
-        )
+    assert result["items"] == []
+    assert result["total"] == 0
+    link_service.click_repo.get_by_link_id.assert_awaited_once_with(
+        1, skip=0, limit=50, ip=None, country=None
+    )
 
 
 @pytest.mark.asyncio
@@ -153,19 +147,24 @@ async def test_get_click_stats(link_service, mock_link):
     link = mock_link(id=1, user_id=1, short_code="test1", clicks=5)
     link_service.link_repo.get_by_code.return_value = link
 
-    with patch("app.repositories.click_repository.ClickRepository") as MockClickRepo:
-        mock_repo_inst = MockClickRepo.return_value
-        mock_repo_inst.get_aggregated_stats = AsyncMock(
-            return_value={"clicks_by_day": [], "top_referers": [], "top_countries": []}
-        )
+    link_service.click_repo.get_aggregated_stats.return_value = {
+        "total_clicks": 0,
+        "unique_clicks": 0,
+        "unique_ips": 0,
+        "granularity": "day",
+        "clicks_over_time": [],
+        "clicks_by_day": [],
+        "top_referers": [],
+        "top_countries": [],
+    }
 
-        result = await link_service.get_click_stats("test1", user_id=1)
+    result = await link_service.get_click_stats("test1", user_id=1)
 
-        assert result["total_clicks"] == 5
-        assert "clicks_by_day" in result
-        mock_repo_inst.get_aggregated_stats.assert_awaited_once_with(
-            1, granularity=None
-        )
+    assert result["total_clicks"] == 5
+    assert "clicks_by_day" in result
+    link_service.click_repo.get_aggregated_stats.assert_awaited_once_with(
+        1, granularity=None
+    )
 
 
 @pytest.mark.asyncio

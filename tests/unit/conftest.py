@@ -14,8 +14,19 @@ def mock_db():
     db = MagicMock()
     db.commit = AsyncMock()
     db.refresh = AsyncMock()
-    db.execute = AsyncMock()
     db.delete = AsyncMock()
+
+    # Setup execute to return a mock result object
+    execute_result = MagicMock()
+    row = MagicMock()
+    row.min_t = datetime.now(timezone.utc)
+    row.max_t = datetime.now(timezone.utc)
+    execute_result.one.return_value = row
+    execute_result.scalar_one_or_none.return_value = None
+    execute_result.scalar_one.return_value = 1
+    execute_result.scalars.return_value.all.return_value = []
+
+    db.execute = AsyncMock(return_value=execute_result)
     return db
 
 
@@ -38,13 +49,33 @@ def mock_redis():
 
 @pytest.fixture
 def link_service(mock_db, mock_redis):
-    service = LinkService(mock_db, redis=mock_redis)
-    service.link_repo = MagicMock()
-    service.link_repo.get_by_code = AsyncMock()
-    service.link_repo.create = AsyncMock()
-    service.link_repo.delete = AsyncMock()
-    service.link_repo.increment_clicks = AsyncMock()
-    service.link_repo.increment_clicks_by_code = AsyncMock()
+    link_repo = MagicMock()
+    link_repo.get_by_code = AsyncMock()
+    link_repo.create = AsyncMock()
+    link_repo.delete = AsyncMock()
+    link_repo.increment_clicks = AsyncMock()
+    link_repo.increment_clicks_by_code = AsyncMock()
+    link_repo.get_by_user_id = AsyncMock()
+
+    click_repo = MagicMock()
+    click_repo.create = AsyncMock()
+    click_repo.get_by_link_id = AsyncMock(return_value=([], 0))
+    click_repo.get_aggregated_stats = AsyncMock(
+        return_value={
+            "total_clicks": 0,
+            "unique_clicks": 0,
+            "unique_ips": 0,
+            "granularity": "day",
+            "clicks_over_time": [],
+            "clicks_by_day": [],
+            "top_referers": [],
+            "top_countries": [],
+        }
+    )
+
+    service = LinkService(
+        mock_db, redis=mock_redis, link_repo=link_repo, click_repo=click_repo
+    )
     return service
 
 
