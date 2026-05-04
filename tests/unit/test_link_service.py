@@ -25,7 +25,7 @@ async def test_shorten_url_auto_code(link_service, mock_link):
         user_id=1,
     )
 
-    assert "short_url" in result
+    assert result.short_url
     link_service.link_repo.create.assert_awaited_once()
 
 
@@ -42,7 +42,7 @@ async def test_shorten_url_auto_code_retry_on_collision(link_service, mock_link)
     )
 
     assert link_service.link_repo.get_by_code.call_count == 2
-    assert "Free12" in result["short_url"]
+    assert "Free12" in result.short_url
 
 
 @pytest.mark.asyncio
@@ -57,7 +57,7 @@ async def test_shorten_url_custom_code(link_service, mock_link):
         custom_code="mylink",
     )
 
-    assert "mylink" in result["short_url"]
+    assert "mylink" in result.short_url
 
 
 @pytest.mark.asyncio
@@ -88,7 +88,7 @@ async def test_shorten_url_with_ttl(link_service, mock_link):
         ttl_minutes=30,
     )
 
-    assert result["expires_at"] is not None
+    assert result.expires_at is not None
     link_service.link_repo.create.assert_awaited_once()
 
 
@@ -131,8 +131,8 @@ async def test_get_clicks(link_service, mock_link):
 
     result = await link_service.get_clicks("test1", user_id=1)
 
-    assert result["items"] == []
-    assert result["total"] == 0
+    assert result.items == []
+    assert result.total == 0
     link_service.click_repo.get_by_link_id.assert_awaited_once_with(
         1, skip=0, limit=50, ip=None, country=None
     )
@@ -156,8 +156,8 @@ async def test_get_click_stats(link_service, mock_link):
 
     result = await link_service.get_click_stats("test1", user_id=1)
 
-    assert result["total_clicks"] == 5
-    assert "clicks_by_day" in result
+    assert result.total_clicks == 5
+    assert result.clicks_by_day is not None
     link_service.click_repo.get_aggregated_stats.assert_awaited_once_with(
         1, granularity=None
     )
@@ -191,7 +191,7 @@ async def test_get_stats_success(link_service, mock_link):
 
     result = await link_service.get_stats("test1", user_id=1)
 
-    assert result["clicks"] == 42
+    assert result.clicks == 42
 
 
 @pytest.mark.asyncio
@@ -266,7 +266,8 @@ async def test_delete_link_invalidates_cache(link_service, mock_link, mock_redis
 
     await link_service.delete_link("del1", user_id=1)
 
-    mock_redis.delete.assert_awaited_once()
+    # One for the URL, one for the user's link list
+    assert mock_redis.delete.await_count == 2
 
 
 @pytest.mark.asyncio
