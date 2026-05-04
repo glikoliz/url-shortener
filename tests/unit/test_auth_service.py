@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi import HTTPException, status
@@ -40,6 +40,9 @@ async def test_login_success(auth_service, mock_user):
     user = mock_user(id=42, password_hash=hashed)
     auth_service.user_repo.get_by_email.return_value = user
 
+    auth_service.user_repo.db.add = Mock()
+    auth_service.user_repo.db.commit = AsyncMock()
+
     token_response = await auth_service.login("test@example.com", password)
 
     assert isinstance(token_response, TokenResponse)
@@ -69,7 +72,7 @@ async def test_login_wrong_password(auth_service, mock_user):
 
 
 def test_verify_token_valid():
-    token = AuthService._create_token(user_id=7)
+    token = AuthService._create_access_token(user_id=7)
     result = AuthService.verify_token(token)
     assert result == 7
 
@@ -79,7 +82,7 @@ def test_verify_token_expired():
         mock_settings.jwt_secret = "test_secret"
         mock_settings.jwt_algorithm = "HS256"
         mock_settings.jwt_expiration_minutes = -60
-        token = AuthService._create_token(user_id=1)
+        token = AuthService._create_access_token(user_id=1)
 
     with pytest.raises(HTTPException) as exc_info:
         AuthService.verify_token(token)

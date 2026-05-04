@@ -207,7 +207,7 @@ async def test_create_link_rate_limit(client):
         headers=headers,
     )
     assert response.status_code == 429
-    assert response.json()["detail"] == "Too Many Requests"
+    assert response.json()["error"]["message"] == "Too Many Requests"
 
 
 @pytest.mark.asyncio
@@ -272,4 +272,4 @@ async def test_get_link_stats_forbidden(client):
         headers={"Authorization": f"Bearer {token_other}"},
     )
     assert response.status_code == 403
-    assert response.json()["detail"] == "Not your link"
+    assert response.json()["error"]["message"] == "Not your link"

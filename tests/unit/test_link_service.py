@@ -108,15 +108,17 @@ async def test_count_click(link_service, mock_link):
     link_service.link_repo.get_by_code.return_value = link
 
     with (
-        patch("app.repositories.click_repository.ClickRepository") as MockClickRepo,
-        patch("app.redis.get_redis") as mock_get_redis,
+        patch("app.services.link_service.ClickRepository") as MockClickRepo,
+        patch("app.services.link_service.get_redis") as mock_get_redis,
+        patch("app.services.link_service.publish_link_update") as mock_publish,
     ):
         mock_redis = AsyncMock()
-        mock_redis.get.return_value = None
         mock_get_redis.return_value = mock_redis
 
         mock_repo_inst = MockClickRepo.return_value
         mock_repo_inst.create = AsyncMock()
+
+        link_service.link_repo.increment_clicks_by_code.return_value = 1
 
         await link_service.count_click(
             "abc123", "1.2.3.4", "Mozilla", "https://ref.com"
@@ -126,6 +128,7 @@ async def test_count_click(link_service, mock_link):
             "abc123"
         )
         mock_repo_inst.create.assert_awaited_once()
+        mock_publish.assert_awaited_once()
 
 
 @pytest.mark.asyncio
