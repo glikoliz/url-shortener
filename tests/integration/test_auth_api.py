@@ -23,9 +23,9 @@ async def test_register_and_login(client):
         },
     )
     assert login_response.status_code == 200
-    token_data = login_response.json()
-    assert "access_token" in token_data
-    assert token_data["token_type"] == "bearer"
+    assert login_response.json()["message"] == "Logged in successfully"
+    assert "access_token" in client.cookies
+    assert "refresh_token" in client.cookies
 
 
 @pytest.mark.asyncio

@@ -23,6 +23,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 class AuthService:
     def __init__(self, db: AsyncSession) -> None:
+        self.db = db
         self.user_repo = UserRepository(db)
 
     async def register(self, email: str, password: str) -> UserResponse:
@@ -34,6 +35,8 @@ class AuthService:
             )
         password_hash = pwd_context.hash(password)
         user = await self.user_repo.create(email=email, password_hash=password_hash)
+        await self.db.commit()
+        await self.db.refresh(user)
         logger.info(f"New user registered: {email}")
         return UserResponse.model_validate(user)
 
@@ -66,7 +69,7 @@ class AuthService:
 
         # Rotate token: revoke old one and create new one
         token_record.revoked = True
-        await self.user_repo.db.commit()
+        await self.db.commit()
 
         access_token = self._create_access_token(token_record.user_id)
         new_refresh_token = await self._create_refresh_token(token_record.user_id)
@@ -94,8 +97,8 @@ class AuthService:
         )
 
         new_token = RefreshToken(token=token, user_id=user_id, expires_at=expire)
-        self.user_repo.db.add(new_token)
-        await self.user_repo.db.commit()
+        self.db.add(new_token)
+        await self.db.commit()
 
         return token
 

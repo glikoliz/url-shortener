@@ -10,8 +10,6 @@ class LinkRepository:
 
     async def create(self, link: Link) -> Link:
         self.db.add(link)
-        await self.db.commit()
-        await self.db.refresh(link)
         return link
 
     async def get_by_code(self, short_code: str) -> Link | None:
@@ -28,7 +26,6 @@ class LinkRepository:
 
     async def delete(self, link: Link) -> None:
         await self.db.delete(link)
-        await self.db.commit()
 
     async def increment_clicks(self, link_id: int) -> int:
         result = await self.db.execute(
@@ -37,7 +34,6 @@ class LinkRepository:
             .values(clicks=Link.clicks + 1)
             .returning(Link.clicks)
         )
-        await self.db.commit()
         return result.scalar_one()
 
     async def increment_clicks_by_code(self, short_code: str) -> int:
@@ -48,5 +44,4 @@ class LinkRepository:
             .values(clicks=Link.clicks + 1)
             .returning(Link.clicks)
         )
-        await self.db.commit()
         return result.scalar_one()

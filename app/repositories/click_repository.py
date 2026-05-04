@@ -10,8 +10,6 @@ class ClickRepository:
 
     async def create(self, click_event: ClickEvent) -> ClickEvent:
         self.db.add(click_event)
-        await self.db.commit()
-        await self.db.refresh(click_event)
         return click_event
 
     async def get_by_link_id(

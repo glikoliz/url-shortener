@@ -1,6 +1,7 @@
 import os
 
 os.environ["TESTCONTAINERS_RYUK_DISABLED"] = "true"
+os.environ["COOKIE_SECURE"] = "false"
 
 from unittest.mock import AsyncMock, patch
 

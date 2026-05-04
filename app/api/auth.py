@@ -16,17 +16,17 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
+        secure=settings.cookie_secure,
         samesite="lax",
-        max_age=settings.jwt_expiration_minutes * 60,
+        max_age=int(settings.jwt_expiration_minutes) * 60,
     )
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
+        secure=settings.cookie_secure,
         samesite="lax",
-        max_age=settings.refresh_token_expiration_days * 24 * 60 * 60,
+        max_age=int(settings.refresh_token_expiration_days) * 24 * 60 * 60,
     )
 
 

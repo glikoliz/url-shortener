@@ -42,6 +42,7 @@ async def _resolve_final_url(url: str) -> str:
 
 class LinkService:
     def __init__(self, db: AsyncSession, redis: Redis | None = None) -> None:
+        self.db = db
         self.link_repo = LinkRepository(db)
         self.cache = CacheService(redis)
 
@@ -100,6 +101,8 @@ class LinkService:
 
             try:
                 link = await self.link_repo.create(link)
+                await self.db.commit()
+                await self.db.refresh(link)
                 break
             except IntegrityError:
                 if custom_code:
@@ -128,11 +131,11 @@ class LinkService:
             user_id,
             {
                 "type": "link_created",
-                "link": LinkResponse.model_validate(link).model_dump(),
+                "link": LinkResponse.model_validate(link).model_dump(mode="json"),
             },
         )
 
-        return LinkResponse.model_validate(link).model_dump()
+        return LinkResponse.model_validate(link).model_dump(mode="json")
 
     async def resolve_link(self, short_code: str) -> str:
         # Cache hit: Redis TTL handles expiration — zero DB queries
@@ -179,8 +182,8 @@ class LinkService:
                 is_unique=is_unique,
             )
             await click_repo.create(event)
-
             new_click_count = await self.link_repo.increment_clicks_by_code(short_code)
+            await self.db.commit()
 
             # Notify UI via SSE
             await publish_link_update(
@@ -196,7 +199,7 @@ class LinkService:
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
-        return LinkResponse.model_validate(link).model_dump()
+        return LinkResponse.model_validate(link).model_dump(mode="json")
 
     async def get_clicks(
         self,
@@ -237,7 +240,9 @@ class LinkService:
 
     async def get_user_links(self, user_id: int):
         links = await self.link_repo.get_by_user_id(user_id)
-        return [LinkResponse.model_validate(link).model_dump() for link in links]
+        return [
+            LinkResponse.model_validate(link).model_dump(mode="json") for link in links
+        ]
 
     async def get_updates_stream(self, user_id: int):
         """Generate SSE events from Redis Pub/Sub."""
@@ -261,6 +266,7 @@ class LinkService:
                 detail="You can only delete your own links",
             )
         await self.link_repo.delete(link)
+        await self.db.commit()
         await self.cache.delete_url(short_code)
 
         # Publish SSE event

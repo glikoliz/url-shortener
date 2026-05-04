@@ -11,7 +11,12 @@ from app.services.link_service import LinkService
 
 @pytest.fixture
 def mock_db():
-    return AsyncMock()
+    db = MagicMock()
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    db.execute = AsyncMock()
+    db.delete = AsyncMock()
+    return db
 
 
 @pytest.fixture

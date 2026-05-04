@@ -16,10 +16,8 @@ export interface TokenResponse {
 }
 
 export interface User {
-  id?: number;
-  email?: string;
-  token?: string;
-  [key: string]: any;
+  id: number;
+  email: string;
 }
 
 export interface SSEEvent {
