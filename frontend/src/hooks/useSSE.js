@@ -20,7 +20,8 @@ export const useSSE = (onEvent) => {
 
     const connect = () => {
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-      const url = `${API_URL}/links/stream?token=${encodeURIComponent(token)}`;
+      const currentToken = localStorage.getItem('token') || token;
+      const url = `${API_URL}/links/stream?token=${encodeURIComponent(currentToken)}`;
 
       eventSource = new EventSource(url);
 
@@ -43,21 +44,10 @@ export const useSSE = (onEvent) => {
 
       eventSource.onerror = (err) => {
         setIsConnected(false);
-        // If closed, it might be a 401 or network issue
         if (eventSource.readyState === EventSource.CLOSED) {
           setError(true);
 
-          // Basic token expiry check
-          try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            if (Date.now() >= payload.exp * 1000) {
-              logout();
-              return;
-            }
-          } catch (e) { }
-
-          // Retry logic for network issues
-          reconnectTimeout = setTimeout(connect, 5000);
+          reconnectTimeout = setTimeout(connect, 3000);
         }
       };
     };

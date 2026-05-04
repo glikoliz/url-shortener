@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 86400
     jwt_secret: str
     jwt_algorithm: str = "HS256"
-    jwt_expiration_minutes: int = 60 * 24
+    jwt_expiration_minutes: float = 30.0
+    refresh_token_expiration_days: int = 7
     base_url: str = "http://localhost:8000"
     allowed_origins: list[str] = [
         "http://localhost:5173",

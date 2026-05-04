@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.dependencies import get_auth_service
@@ -32,4 +32,16 @@ async def login(
     service: AuthService = Depends(get_auth_service),
 ):
     result = await service.login(email=form.username, password=form.password)
+    return result
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+)
+async def refresh(
+    refresh_token: str = Body(..., embed=True),
+    service: AuthService = Depends(get_auth_service),
+):
+    result = await service.refresh_token(refresh_token)
     return result

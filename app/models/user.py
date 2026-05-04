@@ -10,6 +10,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.link import Link
+    from app.models.refresh_token import RefreshToken
 
 
 class User(Base):
@@ -24,3 +25,6 @@ class User(Base):
     )
 
     links: Mapped[list["Link"]] = relationship(back_populates="user")
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )

@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
     setToken(data.access_token);
     setUser({ token: data.access_token });
     localStorage.setItem('token', data.access_token);
-    localStorage.removeItem('user');
+    localStorage.setItem('refreshToken', data.refresh_token);
     return data;
   };
 
@@ -41,8 +41,27 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
   };
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const newToken = localStorage.getItem('token');
+      if (newToken !== token) {
+        setToken(newToken);
+        setUser(newToken ? { token: newToken } : null);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    const interval = setInterval(handleStorageChange, 2000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [token]);
 
   return (
     <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
