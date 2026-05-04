@@ -1,13 +1,14 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 
-from app.api.dependencies import get_current_user, get_link_service
+from app.api.dependencies import (
+    get_current_user,
+    get_link_service,
+    get_user_id_from_token,
+)
 from app.limiter import RateLimiter
 from app.models.user import User
-from app.schemas.click import (
-    ClickStatsResponse,
-    PaginatedClickResponse,
-)
+from app.schemas.click import ClickStatsResponse, PaginatedClickResponse
 from app.schemas.link import LinkCreate, LinkResponse
 from app.services.link_service import LinkService
 
@@ -41,6 +42,22 @@ async def get_user_links(
     service: LinkService = Depends(get_link_service),
 ):
     return await service.get_user_links(current_user.id)
+
+
+@router.get("/stream")
+async def stream_link_updates(
+    user_id: int = Depends(get_user_id_from_token),
+    service: LinkService = Depends(get_link_service),
+):
+    return StreamingResponse(
+        service.get_updates_stream(user_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/{short_code}", response_model=LinkResponse)

@@ -25,3 +25,22 @@ async def get_redis() -> Redis:
     if redis_client is None:
         raise RuntimeError("Redis is not initialized")
     return redis_client
+
+
+async def publish_link_update(user_id: int, data: dict) -> None:
+    """Publish link update event to Redis for SSE."""
+    if redis_client is None:
+        return
+    import json
+
+    channel = f"sse:user:{user_id}"
+    await redis_client.publish(channel, json.dumps(data))
+
+
+async def subscribe_to_user_updates(user_id: int) -> Redis:
+    """Subscribe to user-specific SSE channel."""
+    if redis_client is None:
+        raise RuntimeError("Redis is not initialized")
+    pubsub = redis_client.pubsub()
+    await pubsub.subscribe(f"sse:user:{user_id}")
+    return pubsub

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.link import Link
+from app.redis import publish_link_update, subscribe_to_user_updates
 from app.repositories.link_repository import LinkRepository
 from app.services.cache_service import CacheService
 
@@ -71,6 +72,11 @@ class LinkService:
         max_retries = 5
         for attempt in range(max_retries):
             if custom_code:
+                if not custom_code.isalnum():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Custom code must contain only alphanumeric characters",
+                    )
                 short_code = custom_code
                 if await self.link_repo.get_by_code(short_code):
                     raise HTTPException(
@@ -118,6 +124,18 @@ class LinkService:
 
         logger.info(f"URL shortened: {original_url} -> {short_code} (user: {user_id})")
 
+        # Publish SSE event
+        await publish_link_update(
+            user_id,
+            {
+                "type": "link_created",
+                "link": {
+                    **_link_to_dict(link),
+                    "short_url": f"{settings.base_url}/s/{link.short_code}",
+                },
+            },
+        )
+
         return {
             **_link_to_dict(link),
             "short_url": f"{settings.base_url}/s/{link.short_code}",
@@ -162,6 +180,18 @@ class LinkService:
             )
             await click_repo.create(event)
             await self.link_repo.increment_clicks_by_code(short_code)
+
+            # Fetch updated link to get current click count and user_id for SSE
+            updated_link = await self.link_repo.get_by_code(short_code)
+            if updated_link:
+                await publish_link_update(
+                    updated_link.user_id,
+                    {
+                        "type": "link_updated",
+                        "short_code": short_code,
+                        "clicks": updated_link.clicks,
+                    },
+                )
 
     async def get_stats(self, short_code: str, user_id: int):
         link = await self._get_link_or_404(short_code)
@@ -219,6 +249,20 @@ class LinkService:
             for link in links
         ]
 
+    async def get_updates_stream(self, user_id: int):
+        """Generate SSE events from Redis Pub/Sub."""
+        import json
+
+        pubsub = await subscribe_to_user_updates(user_id)
+        try:
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    data = json.loads(message["data"])
+                    yield f"data: {json.dumps(data)}\n\n"
+        finally:
+            await pubsub.unsubscribe(f"sse:user:{user_id}")
+            await pubsub.close()
+
     async def delete_link(self, short_code: str, user_id: int) -> None:
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
@@ -228,6 +272,15 @@ class LinkService:
             )
         await self.link_repo.delete(link)
         await self.cache.delete_url(short_code)
+
+        # Publish SSE event
+        await publish_link_update(
+            user_id,
+            {
+                "type": "link_deleted",
+                "short_code": short_code,
+            },
+        )
 
     async def _get_link_or_404(self, short_code: str) -> Link:
         link = await self.link_repo.get_by_code(short_code)
@@ -253,6 +306,6 @@ def _link_to_dict(link: Link) -> dict:
         "original_url": link.original_url,
         "short_code": link.short_code,
         "clicks": link.clicks,
-        "created_at": link.created_at,
-        "expires_at": link.expires_at,
+        "created_at": link.created_at.isoformat() if link.created_at else None,
+        "expires_at": link.expires_at.isoformat() if link.expires_at else None,
     }

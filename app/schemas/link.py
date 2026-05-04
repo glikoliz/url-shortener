@@ -1,12 +1,21 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 class LinkCreate(BaseModel):
     original_url: HttpUrl
-    custom_code: str | None = Field(default=None, examples=[None])
+    custom_code: str | None = Field(
+        default=None, examples=[None], min_length=3, max_length=32
+    )
     ttl_minutes: int | None = Field(default=None, le=31536000)
+
+    @field_validator("custom_code")
+    @classmethod
+    def validate_custom_code(cls, v: str | None) -> str | None:
+        if v is not None and not v.isalnum():
+            raise ValueError("Custom code must contain only alphanumeric characters")
+        return v
 
 
 class LinkResponse(BaseModel):

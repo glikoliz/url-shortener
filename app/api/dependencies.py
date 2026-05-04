@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -34,3 +34,7 @@ def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
 
 def get_link_service(db: AsyncSession = Depends(get_db)) -> LinkService:
     return LinkService(db)
+
+
+def get_user_id_from_token(token: str = Query(...)) -> int:
+    return AuthService.verify_token(token)
