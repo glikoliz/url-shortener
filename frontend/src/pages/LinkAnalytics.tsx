@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   AreaChart,
@@ -16,9 +16,10 @@ import { apiClient } from '../api/client';
 import GlassCard from '../components/GlassCard';
 import LiveIndicator from '../components/LiveIndicator';
 import { useSSE } from '../hooks/useSSE';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { LinkStats, ClicksResponse, SSEEvent, Click } from '../types';
 
-
-const fmtDate = (iso) =>
+const fmtDate = (iso: string) =>
   new Date(iso).toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',
@@ -27,7 +28,7 @@ const fmtDate = (iso) =>
     minute: '2-digit',
   });
 
-const parseUa = (ua) => {
+const parseUa = (ua: string | null) => {
   if (!ua) return 'Unknown';
   const browsers = [
     ['Edg', 'Edge'],
@@ -42,8 +43,13 @@ const parseUa = (ua) => {
   return 'Other';
 };
 
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: any[];
+  label?: string;
+}
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div
@@ -62,8 +68,14 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
+interface StatCardProps {
+  icon: any;
+  label: string;
+  value: string | number;
+  color: string;
+}
 
-const StatCard = ({ icon: Icon, label, value, color }) => (
+const StatCard = ({ icon: Icon, label, value, color }: StatCardProps) => (
   <div
     style={{
       background: 'rgba(255,255,255,0.03)',
@@ -98,8 +110,7 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
   </div>
 );
 
-
-const ClickRow = ({ click }) => (
+const ClickRow = ({ click }: { click: Click }) => (
   <tr
     style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
     className="hover-row"
@@ -145,80 +156,58 @@ const ClickRow = ({ click }) => (
   </tr>
 );
 
-
 const LinkAnalytics = () => {
-  const { code } = useParams();
+  const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const [stats, setStats] = useState(null);
-  const [clicks, setClicks] = useState([]);
-  const [loadingStats, setLoadingStats] = useState(true);
-  const [loadingClicks, setLoadingClicks] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null); // 'not_found' | 'forbidden' | 'other'
-  const [sortConfig, setSortConfig] = useState({ key: 'clicked_at', direction: 'desc' });
-  const [selectedGranularity, setSelectedGranularity] = useState(null);
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'clicked_at', direction: 'desc' });
+  const [selectedGranularity, setSelectedGranularity] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalClicks, setTotalClicks] = useState(0);
   const [ipFilter, setIpFilter] = useState('');
   const [countryFilter, setCountryFilter] = useState('');
   const CLICKS_PER_PAGE = 25;
 
-  const fetchAll = useCallback(async (gran = selectedGranularity, page = currentPage, ip = ipFilter, country = countryFilter) => {
-    try {
-      const skip = (page - 1) * CLICKS_PER_PAGE;
-      const statsUrl = gran ? `/links/${code}/stats?granularity=${gran}` : `/links/${code}/stats`;
-      const clicksUrl = `/links/${code}/clicks?limit=${CLICKS_PER_PAGE}&skip=${skip}&ip=${ip}&country=${country}`;
+  // Stats Query
+  const { data: stats, isLoading: loadingStats, error: statsError } = useQuery<LinkStats>({
+    queryKey: ['linkStats', code, selectedGranularity],
+    queryFn: () => apiClient(selectedGranularity ? `/links/${code}/stats?granularity=${selectedGranularity}` : `/links/${code}/stats`),
+    enabled: !!code,
+  });
 
-      const [s, cData] = await Promise.all([
-        apiClient(statsUrl),
-        apiClient(clicksUrl),
-      ]);
-      setStats(s);
-      setClicks(cData.items);
-      setTotalClicks(cData.total);
-      setError(null);
-    } catch (err) {
-      console.error("Analytics fetch failed:", err);
-      if (err.message.includes('Not your link') || err.message.includes('Forbidden')) {
-        setError('forbidden');
-      } else if (err.message.includes('not found')) {
-        setError('not_found');
-      } else {
-        setError('other');
-      }
-    } finally {
-      setLoadingStats(false);
-      setLoadingClicks(false);
-      setRefreshing(false);
-    }
-  }, [code, selectedGranularity, currentPage, ipFilter, countryFilter]);
+  // Clicks Query
+  const skip = (currentPage - 1) * CLICKS_PER_PAGE;
+  const { data: clicksData, isLoading: loadingClicks } = useQuery<ClicksResponse>({
+    queryKey: ['linkClicks', code, currentPage, ipFilter, countryFilter],
+    queryFn: () => apiClient(`/links/${code}/clicks?limit=${CLICKS_PER_PAGE}&skip=${skip}&ip=${ipFilter}&country=${countryFilter}`),
+    enabled: !!code,
+  });
 
-  // Real-time updates: refresh if current link is updated
-  const { isConnected, error: sseError } = useSSE((data) => {
+  const clicks = clicksData?.items || [];
+  const totalClicksCount = clicksData?.total || 0;
+
+  // Real-time updates
+  const { isConnected, error: sseError } = useSSE((data: SSEEvent) => {
     if (data.type === 'link_updated' && data.short_code === code) {
-      console.log('Real-time update received for current link, refreshing...');
-      fetchAll();
+      queryClient.invalidateQueries({ queryKey: ['linkStats', code] });
+      queryClient.invalidateQueries({ queryKey: ['linkClicks', code] });
     }
   });
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchAll();
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [fetchAll, ipFilter, countryFilter, currentPage]);
-
   const handleRefresh = () => {
-    setRefreshing(true);
-    fetchAll();
+    queryClient.invalidateQueries({ queryKey: ['linkStats', code] });
+    queryClient.invalidateQueries({ queryKey: ['linkClicks', code] });
   };
 
-  const topCountry = stats?.top_countries?.[0]?.country || 'Unknown';
-  const uniqueIps = new Set(clicks.map((c) => c.ip_address)).size;
+  const error = (statsError as any)?.message;
+  const isForbidden = error?.includes('Not your link') || error?.includes('Forbidden');
+  const isNotFound = error?.includes('not found');
 
-  const requestSort = (key) => {
-    let direction = 'asc';
+  const topCountry = stats?.top_countries?.[0]?.country || 'Unknown';
+  const totalUniqueClicks = stats?.unique_ips || 0;
+
+  const requestSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
     }
@@ -229,8 +218,8 @@ const LinkAnalytics = () => {
     let sortableItems = [...clicks];
     if (sortConfig.key !== null) {
       sortableItems.sort((a, b) => {
-        let aVal = a[sortConfig.key] || '';
-        let bVal = b[sortConfig.key] || '';
+        let aVal = (a as any)[sortConfig.key] || '';
+        let bVal = (b as any)[sortConfig.key] || '';
 
         if (sortConfig.key === 'user_agent') {
           aVal = parseUa(aVal);
@@ -249,12 +238,12 @@ const LinkAnalytics = () => {
     return sortableItems;
   }, [clicks, sortConfig]);
 
-  const getSortIcon = (key) => {
+  const getSortIcon = (key: string) => {
     if (sortConfig.key !== key) return <ArrowUpDown size={14} style={{ opacity: 0.3 }} />;
     return sortConfig.direction === 'asc' ? <ChevronUp size={14} color="var(--accent-color)" /> : <ChevronDown size={14} color="var(--accent-color)" />;
   };
 
-  if (error === 'forbidden') {
+  if (isForbidden) {
     return (
       <div style={{ padding: '60px 20px', display: 'flex', justifyContent: 'center' }} className="animate-fade-in">
         <GlassCard style={{ maxWidth: '500px', width: '100%', textAlign: 'center', padding: '48px 32px' }}>
@@ -303,7 +292,7 @@ const LinkAnalytics = () => {
     );
   }
 
-  if (error === 'not_found') {
+  if (isNotFound) {
      return (
       <div style={{ padding: '60px 20px', display: 'flex', justifyContent: 'center' }} className="animate-fade-in">
         <GlassCard style={{ maxWidth: '500px', width: '100%', textAlign: 'center', padding: '48px 32px' }}>
@@ -354,7 +343,7 @@ const LinkAnalytics = () => {
 
         <button
           onClick={handleRefresh}
-          disabled={refreshing}
+          disabled={loadingStats || loadingClicks}
           style={{
             background: 'rgba(56,189,248,0.1)',
             border: '1px solid rgba(56,189,248,0.2)',
@@ -366,10 +355,10 @@ const LinkAnalytics = () => {
             gap: '6px',
             fontSize: '14px',
             transition: 'all 0.2s',
-            opacity: refreshing ? 0.6 : 1,
+            opacity: (loadingStats || loadingClicks) ? 0.6 : 1,
           }}
         >
-          <RefreshCw size={15} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+          <RefreshCw size={15} style={{ animation: (loadingStats || loadingClicks) ? 'spin 1s linear infinite' : 'none' }} />
           Refresh
         </button>
       </div>
@@ -386,7 +375,7 @@ const LinkAnalytics = () => {
         >
           <StatCard icon={MousePointerClick} label="Total Clicks" value={stats.total_clicks} color="var(--accent-color)" />
           <StatCard icon={MousePointerClick} label="Unique Clicks" value={stats.unique_clicks} color="#fbbf24" />
-          <StatCard icon={Globe} label="Unique IPs" value={uniqueIps} color="#60a5fa" />
+          <StatCard icon={Globe} label="Unique IPs" value={totalUniqueClicks} color="#60a5fa" />
           <StatCard icon={Link2} label="Top Country" value={topCountry} color="#34d399" />
         </div>
       )}
@@ -427,9 +416,9 @@ const LinkAnalytics = () => {
           <div style={{ height: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
             Loading…
           </div>
-        ) : stats?.clicks_by_day?.length > 0 ? (
+        ) : (stats?.clicks_by_day?.length ?? 0) > 0 ? (
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={stats.clicks_by_day} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+            <AreaChart data={stats?.clicks_by_day || []} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="clicksGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="var(--accent-color)" stopOpacity={0.4} />
@@ -462,10 +451,10 @@ const LinkAnalytics = () => {
         {/* Top Referers */}
         <GlassCard>
           <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>Top Sources</h2>
-          {stats?.top_referers?.length > 0 ? (
+          {(stats?.top_referers?.length ?? 0) > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart
-                data={stats.top_referers.slice(0, 6)}
+                data={stats?.top_referers?.slice(0, 6) || []}
                 layout="vertical"
                 margin={{ top: 0, right: 10, left: 0, bottom: 0 }}
               >
@@ -476,7 +465,7 @@ const LinkAnalytics = () => {
                   dataKey="referer"
                   width={80}
                   tick={{ fontSize: 11, fill: '#8b8e98' }}
-                  tickFormatter={(v) => (v.length > 12 ? v.slice(0, 12) + '…' : v)}
+                  tickFormatter={(v) => (v && v.length > 12 ? v.slice(0, 12) + '…' : v || '')}
                 />
                 <Tooltip
                   formatter={(v) => [v, 'clicks']}
@@ -495,10 +484,10 @@ const LinkAnalytics = () => {
         {/* Top Countries */}
         <GlassCard>
           <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>Top Countries</h2>
-          {stats?.top_countries?.length > 0 ? (
+          {(stats?.top_countries?.length ?? 0) > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart
-                data={stats.top_countries.slice(0, 6)}
+                data={stats?.top_countries?.slice(0, 6) || []}
                 layout="vertical"
                 margin={{ top: 0, right: 10, left: 0, bottom: 0 }}
               >
@@ -629,10 +618,10 @@ const LinkAnalytics = () => {
               </tbody>
             </table>
 
-            {(totalClicks > CLICKS_PER_PAGE || currentPage > 1) && (
+            {(totalClicksCount > CLICKS_PER_PAGE || currentPage > 1) && (
               <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Showing {Math.min(totalClicks, (currentPage - 1) * CLICKS_PER_PAGE + 1)}-{Math.min(totalClicks, currentPage * CLICKS_PER_PAGE)} of {totalClicks}
+                  Showing {Math.min(totalClicksCount, (currentPage - 1) * CLICKS_PER_PAGE + 1)}-{Math.min(totalClicksCount, currentPage * CLICKS_PER_PAGE)} of {totalClicksCount}
                 </span>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
@@ -651,15 +640,15 @@ const LinkAnalytics = () => {
                     Previous
                   </button>
                   <button
-                    disabled={currentPage * CLICKS_PER_PAGE >= totalClicks}
+                    disabled={currentPage * CLICKS_PER_PAGE >= totalClicksCount}
                     onClick={() => setCurrentPage(p => p + 1)}
                     style={{
                       padding: '6px 12px',
                       borderRadius: '6px',
                       border: '1px solid rgba(255,255,255,0.1)',
                       background: 'rgba(255,255,255,0.05)',
-                      color: currentPage * CLICKS_PER_PAGE >= totalClicks ? 'rgba(255,255,255,0.2)' : '#fff',
-                      cursor: currentPage * CLICKS_PER_PAGE >= totalClicks ? 'default' : 'pointer',
+                      color: currentPage * CLICKS_PER_PAGE >= totalClicksCount ? 'rgba(255,255,255,0.2)' : '#fff',
+                      cursor: currentPage * CLICKS_PER_PAGE >= totalClicksCount ? 'default' : 'pointer',
                       fontSize: '12px'
                     }}
                   >

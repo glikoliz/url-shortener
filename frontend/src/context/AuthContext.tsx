@@ -1,20 +1,29 @@
-/* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { apiClient } from '../api/client';
+import type { User } from '../types';
 
-const AuthContext = createContext(null);
+interface AuthContextType {
+  user: User | null;
+  token: string | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<any>;
+  register: (email: string, password: string) => Promise<any>;
+  logout: () => void;
+}
 
-export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(() => localStorage.getItem('token'));
-  const [user, setUser] = useState(() => {
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [user, setUser] = useState<User | null>(() => {
     const t = localStorage.getItem('token');
     return t ? { token: t } : null;
   });
   const [loading] = useState(false);
 
-  const login = async (username, password) => {
+  const login = async (email: string, password: string) => {
     const formData = new FormData();
-    formData.append('username', username);
+    formData.append('username', email);
     formData.append('password', password);
 
     const data = await apiClient('/auth/login', {
@@ -29,7 +38,7 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  const register = async (email, password) => {
+  const register = async (email: string, password: string) => {
     const data = await apiClient('/auth/register', {
       body: { email, password },
       method: 'POST',

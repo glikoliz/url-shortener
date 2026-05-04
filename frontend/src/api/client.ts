@@ -1,37 +1,43 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 let isRefreshing = false;
-let refreshSubscribers = [];
+let refreshSubscribers: ((token: string) => void)[] = [];
 
-const subscribeTokenRefresh = (cb) => {
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
   refreshSubscribers.push(cb);
 };
 
-const onTokenRefreshed = (token) => {
+const onTokenRefreshed = (token: string) => {
   refreshSubscribers.map((cb) => cb(token));
   refreshSubscribers = [];
 };
 
-export const apiClient = async (endpoint, { body, ...customConfig } = {}) => {
+interface ApiOptions extends RequestInit {
+  body?: any;
+}
+
+export const apiClient = async (endpoint: string, { body, ...customConfig }: ApiOptions = {}) => {
   const token = localStorage.getItem('token');
-  const headers = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const config = {
+  const config: RequestInit = {
     method: body ? 'POST' : 'GET',
     ...customConfig,
     headers: {
       ...headers,
-      ...customConfig.headers,
+      ...(customConfig.headers as Record<string, string>),
     },
   };
 
   if (body) {
     if (body instanceof FormData) {
-      delete config.headers['Content-Type'];
+      if (config.headers) {
+        delete (config.headers as Record<string, string>)['Content-Type'];
+      }
       config.body = body;
     } else {
       config.body = JSON.stringify(body);
@@ -71,7 +77,9 @@ export const apiClient = async (endpoint, { body, ...customConfig } = {}) => {
             isRefreshing = false;
             onTokenRefreshed(access_token);
 
-            config.headers.Authorization = `Bearer ${access_token}`;
+            if (config.headers) {
+              (config.headers as Record<string, string>).Authorization = `Bearer ${access_token}`;
+            }
             const retryResponse = await fetch(`${API_URL}${endpoint}`, config);
             return await retryResponse.json();
           } else {
@@ -86,28 +94,35 @@ export const apiClient = async (endpoint, { body, ...customConfig } = {}) => {
         }
       } else {
         // Wait for refresh to complete and retry
-        const newToken = await new Promise((resolve) => {
+        const newToken = await new Promise<string>((resolve) => {
           subscribeTokenRefresh((token) => resolve(token));
         });
 
-        config.headers.Authorization = `Bearer ${newToken}`;
+        if (config.headers) {
+          (config.headers as Record<string, string>).Authorization = `Bearer ${newToken}`;
+        }
         const retryResponse = await fetch(`${API_URL}${endpoint}`, config);
         return await retryResponse.json();
       }
     }
 
-    // Handle other errors
-    let errorMessage = response.statusText || 'API Error';
-    if (data?.detail) {
-      if (typeof data.detail === 'string') {
-        errorMessage = data.detail;
-      } else if (Array.isArray(data.detail)) {
-        errorMessage = data.detail.map(e => `${e.loc[e.loc.length - 1]}: ${e.msg}`).join('; ');
+    // Handle errors using the NEW structure: { success: false, error: { message, details } }
+    let errorMessage = 'API Error';
+
+    if (data?.error?.message) {
+      errorMessage = data.error.message;
+      if (data.error.details && Array.isArray(data.error.details)) {
+         const details = data.error.details.map((e: any) => `${e.loc?.join('.') || 'input'}: ${e.msg}`).join('; ');
+         errorMessage = `${errorMessage} (${details})`;
       }
+    } else if (data?.detail) {
+        // Fallback for old style errors
+        errorMessage = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
     }
+
     throw new Error(errorMessage);
 
-  } catch (error) {
+  } catch (error: any) {
     if (error.message === 'Session expired') {
       logout();
     }

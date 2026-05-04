@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import GlassCard from '../components/GlassCard';
 import { BarChart3, Link as LinkIcon } from 'lucide-react';
 import ShortenForm from '../components/ShortenForm';
@@ -6,72 +7,42 @@ import LinksTable from '../components/LinksTable';
 import LiveIndicator from '../components/LiveIndicator';
 import { apiClient } from '../api/client';
 import { useSSE } from '../hooks/useSSE';
+import type { Link, SSEEvent } from '../types';
 
 const Dashboard = () => {
-  const [links, setLinks] = useState([]);
-  const [stats, setStats] = useState({ totalLinks: '--', totalClicks: '--' });
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const updateStats = useCallback((linksData) => {
-    setStats({
-      totalLinks: linksData.length,
-      totalClicks: linksData.reduce((acc, link) => acc + (link.clicks || 0), 0)
-    });
-  }, []);
+  const { data: links = [], isLoading } = useQuery<Link[]>({
+    queryKey: ['links'],
+    queryFn: () => apiClient('/links'),
+  });
 
-  const fetchLinks = useCallback(async (showLoading = false) => {
-    if (showLoading) {
-      Promise.resolve().then(() => setIsLoading(true));
-    }
-    try {
-      const data = await apiClient('/links');
-      if (data) {
-        setLinks(data);
-        updateStats(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch links", err);
-    } finally {
-      if (showLoading) setIsLoading(false);
-    }
-  }, [updateStats]);
+  const stats = useMemo(() => ({
+    totalLinks: links.length,
+    totalClicks: links.reduce((acc, link) => acc + (link.clicks || 0), 0)
+  }), [links]);
 
-  // Real-time updates via SSE hook
-  const { isConnected, error: sseError } = useSSE((data) => {
+  const { isConnected, error: sseError } = useSSE((data: SSEEvent) => {
     if (data.type === 'link_created' && data.link) {
-      setLinks(prev => {
-        const newLinks = [data.link, ...prev];
-        updateStats(newLinks);
-        return newLinks;
-      });
+      queryClient.setQueryData<Link[]>(['links'], (prev) => [data.link!, ...(prev || [])]);
     } else if (data.type === 'link_deleted' && data.short_code) {
-      setLinks(prev => {
-        const newLinks = prev.filter(link => link.short_code !== data.short_code);
-        updateStats(newLinks);
-        return newLinks;
-      });
+      queryClient.setQueryData<Link[]>(['links'], (prev) =>
+        (prev || []).filter(link => link.short_code !== data.short_code)
+      );
     } else if (data.type === 'link_updated' && data.short_code) {
-      setLinks(prev => {
-        const newLinks = prev.map(link =>
+      queryClient.setQueryData<Link[]>(['links'], (prev) =>
+        (prev || []).map(link =>
           link.short_code === data.short_code
-            ? { ...link, clicks: data.clicks }
+            ? { ...link, clicks: data.clicks! }
             : link
-        );
-        updateStats(newLinks);
-        return newLinks;
-      });
+        )
+      );
     }
   });
 
-  useEffect(() => {
-    const loadData = async () => {
-      await fetchLinks();
-    };
-    loadData();
-  }, [fetchLinks]);
-
-  const handleShortened = () => fetchLinks(false);
-  const handleDeleted = () => fetchLinks(false);
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['links'] });
+  };
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -109,10 +80,10 @@ const Dashboard = () => {
       </div>
 
       {/* Middle Section: Shorten Form */}
-      <ShortenForm onShortened={handleShortened} />
+      <ShortenForm onShortened={handleRefresh} />
 
       {/* Bottom Section: Links Table */}
-      <LinksTable links={links} isLoading={isLoading} onDelete={handleDeleted} />
+      <LinksTable links={links} isLoading={isLoading} onDelete={handleRefresh} />
     </div>
   );
 };

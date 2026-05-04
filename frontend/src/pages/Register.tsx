@@ -2,30 +2,38 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import GlassCard from '../components/GlassCard';
-import { LogIn } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 
-const Login = () => {
+import { useMutation } from '@tanstack/react-query';
+import type { FormEvent } from 'react';
+
+const Register = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const { register, login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
-
-    try {
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (password !== confirmPassword) {
+        throw new Error('Passwords do not match');
+      }
+      await register(email, password);
       await login(email, password);
+    },
+    onSuccess: () => {
       navigate('/');
-    } catch (err) {
-      setError(err.message || 'Failed to login');
-    } finally {
-      setIsLoading(false);
     }
+  });
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    mutation.mutate();
   };
+
+  const isLoading = mutation.isPending;
+  const error = mutation.error?.message;
 
   return (
     <div className="auth-container">
@@ -39,10 +47,10 @@ const Login = () => {
             border: '1px solid var(--glass-border)',
             marginBottom: '16px'
           }}>
-            <LogIn size={28} color="var(--accent-color)" />
+            <UserPlus size={28} color="var(--accent-color)" />
           </div>
-          <h1 style={{ fontSize: '24px', fontWeight: '600', marginBottom: '8px' }}>Welcome Back</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Sign in to manage your links</p>
+          <h1 style={{ fontSize: '24px', fontWeight: '600', marginBottom: '8px' }}>Create Account</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Start shortening your links today</p>
         </div>
 
         {error && (
@@ -100,6 +108,29 @@ const Login = () => {
                 transition: 'border-color 0.2s'
               }}
               placeholder="••••••••"
+              minLength={8}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Confirm Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                background: 'rgba(0,0,0,0.2)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '15px',
+                transition: 'border-color 0.2s'
+              }}
+              placeholder="••••••••"
+              minLength={8}
             />
           </div>
 
@@ -123,16 +154,16 @@ const Login = () => {
             onMouseUp={e => { if (!isLoading) e.currentTarget.style.transform = 'scale(1)' }}
             onMouseLeave={e => { if (!isLoading) e.currentTarget.style.transform = 'scale(1)' }}
           >
-            {isLoading ? 'Signing in...' : 'Sign In'}
+            {isLoading ? 'Creating account...' : 'Sign Up'}
           </button>
         </form>
 
         <p style={{ textAlign: 'center', marginTop: '24px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-          Don't have an account? <Link to="/register" style={{ fontWeight: '500' }}>Sign up</Link>
+          Already have an account? <Link to="/login" style={{ fontWeight: '500' }}>Sign in</Link>
         </p>
       </GlassCard>
     </div>
   );
 };
 
-export default Login;
+export default Register;

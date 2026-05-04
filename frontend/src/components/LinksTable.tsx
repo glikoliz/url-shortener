@@ -4,11 +4,19 @@ import GlassCard from './GlassCard';
 import { apiClient } from '../api/client';
 import { Trash2, Copy, ExternalLink, Check, BarChart2 } from 'lucide-react';
 
-const LinksTable = ({ links, isLoading, onDelete }) => {
-  const [copiedCode, setCopiedCode] = useState(null);
+import type { Link } from '../types';
+
+interface LinksTableProps {
+  links: Link[];
+  isLoading: boolean;
+  onDelete?: () => void;
+}
+
+const LinksTable = ({ links, isLoading, onDelete }: LinksTableProps) => {
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const handleDelete = async (shortCode) => {
+  const handleDelete = async (shortCode: string) => {
     if (!window.confirm('Are you sure you want to delete this link?')) return;
 
     try {
@@ -19,13 +27,13 @@ const LinksTable = ({ links, isLoading, onDelete }) => {
     }
   };
 
-  const handleCopy = (url, code) => {
+  const handleCopy = (url: string, code: string) => {
     navigator.clipboard.writeText(url);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const isValidUrl = (url) => {
+  const isValidUrl = (url: string) => {
     try {
       const parsed = new URL(url);
       return ['http:', 'https:'].includes(parsed.protocol);

@@ -115,10 +115,11 @@ class ClickRepository:
             .limit(20)
         )
 
-        # Total clicks and Unique clicks summary
+        # Total clicks, Unique clicks summary, and Distinct IPs
         summary_query = select(
             func.count().label("total"),
             func.count().filter(ClickEvent.is_unique.is_(True)).label("unique"),
+            func.count(func.distinct(ClickEvent.ip_address)).label("unique_ips"),
         ).where(ClickEvent.link_id == link_id)
 
         summary_result = await self.db.execute(summary_query)
@@ -136,6 +137,7 @@ class ClickRepository:
         return {
             "total_clicks": summary.total,
             "unique_clicks": summary.unique,
+            "unique_ips": summary.unique_ips,
             "clicks_over_time": clicks_over_time,
             "clicks_by_day": clicks_over_time,
             "granularity": granularity,

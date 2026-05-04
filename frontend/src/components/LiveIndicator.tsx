@@ -1,5 +1,10 @@
 
-const LiveIndicator = ({ isConnected, error }) => {
+interface LiveIndicatorProps {
+  isConnected: boolean;
+  error: boolean;
+}
+
+const LiveIndicator = ({ isConnected, error }: LiveIndicatorProps) => {
   return (
     <div style={{
       display: 'flex',

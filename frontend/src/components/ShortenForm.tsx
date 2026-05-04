@@ -1,57 +1,62 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import GlassCard from './GlassCard';
 import { apiClient } from '../api/client';
 import { Link2, Sparkles, Settings2, Copy, Check } from 'lucide-react';
 
-const ShortenForm = ({ onShortened }) => {
+import type { Link } from '../types';
+
+interface ShortenFormProps {
+  onShortened?: () => void;
+}
+
+const ShortenForm = ({ onShortened }: ShortenFormProps) => {
+  const queryClient = useQueryClient();
   const [originalUrl, setOriginalUrl] = useState('');
   const [customCode, setCustomCode] = useState('');
-  const [ttlDays, setTtlDays] = useState(30);
+  const [ttlDays, setTtlDays] = useState<string | number>(30);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
+
+  const mutation = useMutation<Link, Error, any>({
+    mutationFn: (payload) => apiClient('/links', {
+      method: 'POST',
+      body: payload
+    }),
+    onSuccess: () => {
+      setOriginalUrl('');
+      setCustomCode('');
+      if (onShortened) onShortened();
+    }
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError('');
-    setResult(null);
 
-    try {
-      const payload = {
-        original_url: originalUrl,
-        ttl_minutes: ttlDays ? parseInt(ttlDays) * 24 * 60 : null
-      };
+    const payload = {
+      original_url: originalUrl,
+      ttl_minutes: ttlDays ? parseInt(ttlDays) * 24 * 60 : null
+    };
 
-      if (customCode.trim()) {
-        payload.custom_code = customCode.trim();
-      }
-
-      const data = await apiClient('/links', {
-        method: 'POST',
-        body: payload
-      });
-
-      setResult(data);
-      if (onShortened) {
-        onShortened();
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to shorten URL');
-    } finally {
-      setIsLoading(false);
+    if (customCode.trim()) {
+      payload.custom_code = customCode.trim();
     }
+
+    mutation.mutate(payload);
   };
 
   const handleCopy = () => {
-    if (result?.short_url) {
-      navigator.clipboard.writeText(result.short_url);
+    if (mutation.data?.short_url) {
+      navigator.clipboard.writeText(mutation.data.short_url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  const isLoading = mutation.isPending;
+  const error = mutation.error?.message;
+  const result = mutation.data;
 
   return (
     <GlassCard>
