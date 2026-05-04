@@ -1,3 +1,4 @@
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.click_event import ClickEvent
@@ -21,9 +22,6 @@ class ClickRepository:
         ip: str | None = None,
         country: str | None = None,
     ) -> tuple[list[ClickEvent], int]:
-        from sqlalchemy import func, select
-
-        # Build base query
         query = select(ClickEvent).where(ClickEvent.link_id == link_id)
         count_query = (
             select(func.count(ClickEvent.id))
@@ -36,8 +34,6 @@ class ClickRepository:
             count_query = count_query.where(ClickEvent.ip_address.ilike(f"%{ip}%"))
 
         if country and country.strip():
-            from sqlalchemy import or_
-
             if country == "null":
                 query = query.where(
                     or_(ClickEvent.country.is_(None), ClickEvent.country == "")
