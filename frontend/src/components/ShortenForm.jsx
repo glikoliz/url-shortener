@@ -159,8 +159,8 @@ const ShortenForm = ({ onShortened }) => {
                 value={customCode}
                 onChange={e => setCustomCode(e.target.value)}
                 maxLength={20}
-                pattern="^[a-zA-Z0-9-_]+$"
-                title="Only letters, numbers, dashes and underscores are allowed"
+                pattern="^[a-zA-Z0-9]+$"
+                title="Only alphanumeric characters are allowed"
                 style={{
                   width: '100%',
                   padding: '10px 12px',

@@ -3,12 +3,21 @@ import GlassCard from '../components/GlassCard';
 import { BarChart3, Link as LinkIcon } from 'lucide-react';
 import ShortenForm from '../components/ShortenForm';
 import LinksTable from '../components/LinksTable';
+import LiveIndicator from '../components/LiveIndicator';
 import { apiClient } from '../api/client';
+import { useSSE } from '../hooks/useSSE';
 
 const Dashboard = () => {
   const [links, setLinks] = useState([]);
   const [stats, setStats] = useState({ totalLinks: '--', totalClicks: '--' });
   const [isLoading, setIsLoading] = useState(true);
+
+  const updateStats = (linksData) => {
+    setStats({
+      totalLinks: linksData.length,
+      totalClicks: linksData.reduce((acc, link) => acc + link.clicks, 0)
+    });
+  };
 
   const fetchLinks = async (showLoading = false) => {
     if (showLoading) setIsLoading(true);
@@ -16,10 +25,7 @@ const Dashboard = () => {
       const data = await apiClient('/links');
       if (data) {
         setLinks(data);
-        setStats({
-          totalLinks: data.length,
-          totalClicks: data.reduce((acc, link) => acc + link.clicks, 0)
-        });
+        updateStats(data);
       }
     } catch (err) {
       console.error("Failed to fetch links", err);
@@ -28,28 +34,47 @@ const Dashboard = () => {
     }
   };
 
-  useEffect(() => {
-    const initFetch = async () => {
-      await fetchLinks(true);
-    };
-    initFetch();
+  // Real-time updates via SSE hook
+  const { isConnected, error: sseError } = useSSE((data) => {
+    if (data.type === 'link_created' && data.link) {
+      setLinks(prev => {
+        const newLinks = [data.link, ...prev];
+        updateStats(newLinks);
+        return newLinks;
+      });
+    } else if (data.type === 'link_deleted' && data.short_code) {
+      setLinks(prev => {
+        const newLinks = prev.filter(link => link.short_code !== data.short_code);
+        updateStats(newLinks);
+        return newLinks;
+      });
+    } else if (data.type === 'link_updated' && data.short_code) {
+      setLinks(prev => {
+        const newLinks = prev.map(link =>
+          link.short_code === data.short_code
+            ? { ...link, clicks: data.clicks }
+            : link
+        );
+        updateStats(newLinks);
+        return newLinks;
+      });
+    }
+  });
 
-    const interval = setInterval(() => {
-      fetchLinks(false);
-    }, 3000); // 3 seconds polling for real-time clicks
-    return () => clearInterval(interval);
+  useEffect(() => {
+    fetchLinks(true);
   }, []);
 
-  const handleShortened = () => {
-    fetchLinks(false);
-  };
-
-  const handleDeleted = () => {
-    fetchLinks(false);
-  };
+  const handleShortened = () => fetchLinks(false);
+  const handleDeleted = () => fetchLinks(false);
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: '700', margin: 0 }}>Dashboard</h1>
+        <LiveIndicator isConnected={isConnected} error={sseError} />
+      </div>
 
       {/* Top Section: Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
@@ -83,7 +108,6 @@ const Dashboard = () => {
 
       {/* Bottom Section: Links Table */}
       <LinksTable links={links} isLoading={isLoading} onDelete={handleDeleted} />
-
     </div>
   );
 };

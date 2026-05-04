@@ -11,18 +11,11 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import {
-  ArrowLeft,
-  MousePointerClick,
-  Globe,
-  Link2,
-  RefreshCw,
-  ChevronUp,
-  ChevronDown,
-  ArrowUpDown,
-} from 'lucide-react';
+import { ArrowLeft, MousePointerClick, Globe, Link2, RefreshCw, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
 import { apiClient } from '../api/client';
 import GlassCard from '../components/GlassCard';
+import LiveIndicator from '../components/LiveIndicator';
+import { useSSE } from '../hooks/useSSE';
 
 
 const fmtDate = (iso) =>
@@ -177,6 +170,14 @@ const LinkAnalytics = () => {
     }
   }, [code, selectedGranularity, currentPage, ipFilter, countryFilter]);
 
+  // Real-time updates: refresh if current link is updated
+  const { isConnected, error: sseError } = useSSE((data) => {
+    if (data.type === 'link_updated' && data.short_code === code) {
+      console.log('Real-time update received for current link, refreshing...');
+      fetchAll();
+    }
+  });
+
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchAll();
@@ -254,9 +255,10 @@ const LinkAnalytics = () => {
         </button>
 
         <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: '22px', fontWeight: '700' }}>
+          <h1 style={{ fontSize: '22px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px' }}>
             Analytics —{' '}
             <span style={{ color: 'var(--accent-color)' }}>{code}</span>
+            <LiveIndicator isConnected={isConnected} error={sseError} />
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
             Click statistics for your short link
