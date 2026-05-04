@@ -15,6 +15,7 @@ from app.models.link import Link
 from app.redis import get_redis, publish_link_update, subscribe_to_user_updates
 from app.repositories.click_repository import ClickRepository
 from app.repositories.link_repository import LinkRepository
+from app.schemas.link import LinkResponse
 from app.services.cache_service import CacheService
 
 logger = logging.getLogger(__name__)
@@ -127,17 +128,11 @@ class LinkService:
             user_id,
             {
                 "type": "link_created",
-                "link": {
-                    **_link_to_dict(link),
-                    "short_url": f"{settings.base_url}/s/{link.short_code}",
-                },
+                "link": LinkResponse.model_validate(link).model_dump(),
             },
         )
 
-        return {
-            **_link_to_dict(link),
-            "short_url": f"{settings.base_url}/s/{link.short_code}",
-        }
+        return LinkResponse.model_validate(link).model_dump()
 
     async def resolve_link(self, short_code: str) -> str:
         # Cache hit: Redis TTL handles expiration — zero DB queries
@@ -201,10 +196,7 @@ class LinkService:
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
-        return {
-            **_link_to_dict(link),
-            "short_url": f"{settings.base_url}/s/{link.short_code}",
-        }
+        return LinkResponse.model_validate(link).model_dump()
 
     async def get_clicks(
         self,
@@ -245,13 +237,7 @@ class LinkService:
 
     async def get_user_links(self, user_id: int):
         links = await self.link_repo.get_by_user_id(user_id)
-        return [
-            {
-                **_link_to_dict(link),
-                "short_url": f"{settings.base_url}/s/{link.short_code}",
-            }
-            for link in links
-        ]
+        return [LinkResponse.model_validate(link).model_dump() for link in links]
 
     async def get_updates_stream(self, user_id: int):
         """Generate SSE events from Redis Pub/Sub."""
@@ -295,21 +281,9 @@ class LinkService:
             )
         return link
 
-    @staticmethod
-    def _check_expiration(link: Link) -> None:
+    def _check_expiration(self, link: Link) -> None:
         if link.expires_at and link.expires_at < datetime.now(timezone.utc):
             raise HTTPException(
                 status_code=status.HTTP_410_GONE,
                 detail="This short link has expired",
             )
-
-
-def _link_to_dict(link: Link) -> dict:
-    return {
-        "id": link.id,
-        "original_url": link.original_url,
-        "short_code": link.short_code,
-        "clicks": link.clicks,
-        "created_at": link.created_at.isoformat() if link.created_at else None,
-        "expires_at": link.expires_at.isoformat() if link.expires_at else None,
-    }

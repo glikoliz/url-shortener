@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, computed_field, field_validator
+
+from app.config import settings
 
 
 class LinkCreate(BaseModel):
@@ -22,9 +24,13 @@ class LinkResponse(BaseModel):
     id: int
     original_url: str
     short_code: str
-    short_url: str
     clicks: int
     created_at: datetime
     expires_at: datetime | None = None
+
+    @computed_field
+    @property
+    def short_url(self) -> str:
+        return f"{settings.base_url}/s/{self.short_code}"
 
     model_config = {"from_attributes": True}
