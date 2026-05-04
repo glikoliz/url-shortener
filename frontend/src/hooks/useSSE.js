@@ -42,7 +42,7 @@ export const useSSE = (onEvent) => {
         }
       };
 
-      eventSource.onerror = (err) => {
+      eventSource.onerror = () => {
         setIsConnected(false);
         if (eventSource.readyState === EventSource.CLOSED) {
           setError(true);

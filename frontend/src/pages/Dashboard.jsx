@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import GlassCard from '../components/GlassCard';
 import { BarChart3, Link as LinkIcon } from 'lucide-react';
 import ShortenForm from '../components/ShortenForm';
@@ -12,15 +12,17 @@ const Dashboard = () => {
   const [stats, setStats] = useState({ totalLinks: '--', totalClicks: '--' });
   const [isLoading, setIsLoading] = useState(true);
 
-  const updateStats = (linksData) => {
+  const updateStats = useCallback((linksData) => {
     setStats({
       totalLinks: linksData.length,
-      totalClicks: linksData.reduce((acc, link) => acc + link.clicks, 0)
+      totalClicks: linksData.reduce((acc, link) => acc + (link.clicks || 0), 0)
     });
-  };
+  }, []);
 
-  const fetchLinks = async (showLoading = false) => {
-    if (showLoading) setIsLoading(true);
+  const fetchLinks = useCallback(async (showLoading = false) => {
+    if (showLoading) {
+      Promise.resolve().then(() => setIsLoading(true));
+    }
     try {
       const data = await apiClient('/links');
       if (data) {
@@ -32,7 +34,7 @@ const Dashboard = () => {
     } finally {
       if (showLoading) setIsLoading(false);
     }
-  };
+  }, [updateStats]);
 
   // Real-time updates via SSE hook
   const { isConnected, error: sseError } = useSSE((data) => {
@@ -62,8 +64,11 @@ const Dashboard = () => {
   });
 
   useEffect(() => {
-    fetchLinks(true);
-  }, []);
+    const loadData = async () => {
+      await fetchLinks();
+    };
+    loadData();
+  }, [fetchLinks]);
 
   const handleShortened = () => fetchLinks(false);
   const handleDeleted = () => fetchLinks(false);
