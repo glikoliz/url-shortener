@@ -47,17 +47,17 @@ async def test_shorten_url_auto_code_retry_on_collision(link_service, mock_link)
 
 @pytest.mark.asyncio
 async def test_shorten_url_custom_code(link_service, mock_link):
-    created_link = mock_link(short_code="my-link")
+    created_link = mock_link(short_code="mylink")
     link_service.link_repo.get_by_code.return_value = None
     link_service.link_repo.create.return_value = created_link
 
     result = await link_service.shorten_url(
         original_url="https://example.com",
         user_id=1,
-        custom_code="my-link",
+        custom_code="mylink",
     )
 
-    assert "my-link" in result["short_url"]
+    assert "mylink" in result["short_url"]
 
 
 @pytest.mark.asyncio
@@ -107,7 +107,14 @@ async def test_count_click(link_service, mock_link):
     link = mock_link(id=1, short_code="abc123")
     link_service.link_repo.get_by_code.return_value = link
 
-    with patch("app.repositories.click_repository.ClickRepository") as MockClickRepo:
+    with (
+        patch("app.repositories.click_repository.ClickRepository") as MockClickRepo,
+        patch("app.redis.get_redis") as mock_get_redis,
+    ):
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_get_redis.return_value = mock_redis
+
         mock_repo_inst = MockClickRepo.return_value
         mock_repo_inst.create = AsyncMock()
 

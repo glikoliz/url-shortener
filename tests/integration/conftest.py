@@ -76,9 +76,11 @@ async def client(db_engine, redis_url):
 
     from redis.asyncio import Redis
 
+    from app import redis as app_redis
     from app.limiter import limiter_manager
 
     test_redis = Redis.from_url(redis_url, decode_responses=True)
+    app_redis.redis_client = test_redis
     app.dependency_overrides[get_redis] = lambda: test_redis
 
     await limiter_manager.init_limiter(

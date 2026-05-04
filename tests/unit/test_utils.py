@@ -44,7 +44,7 @@ def test_link_to_dict_all_fields():
         "original_url": "https://google.com",
         "short_code": "abc123",
         "clicks": 5,
-        "created_at": link.created_at,
+        "created_at": link.created_at.isoformat(),
         "expires_at": None,
     }
 
@@ -60,4 +60,4 @@ def test_link_to_dict_with_expiry():
 
     result = _link_to_dict(link)
 
-    assert result["expires_at"] == datetime(2030, 1, 1, tzinfo=timezone.utc)
+    assert result["expires_at"] == datetime(2030, 1, 1, tzinfo=timezone.utc).isoformat()
