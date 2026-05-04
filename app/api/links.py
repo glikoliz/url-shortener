@@ -6,8 +6,10 @@ from app.api.dependencies import (
     get_link_service,
     get_user_id_from_token,
 )
-from app.limiter import RateLimiter
+from app.database import db_session
+from app.limiter import RateLimiter, user_aware_identifier
 from app.models.user import User
+from app.redis import redis_client
 from app.schemas.click import ClickStatsResponse, PaginatedClickResponse
 from app.schemas.link import LinkCreate, LinkResponse
 from app.services.link_service import LinkService
@@ -16,11 +18,22 @@ router = APIRouter()
 redirect_router = APIRouter()
 
 
+async def _background_record_click(
+    short_code: str, ip: str | None, user_agent: str | None, referer: str | None
+):
+    """Background task to record click analytics in DB using a fresh session."""
+    async with db_session() as db:
+        service = LinkService(db, redis=redis_client)
+        await service.count_click(short_code, ip, user_agent, referer)
+
+
 @router.post(
     "",
     response_model=LinkResponse,
     status_code=201,
-    dependencies=[Depends(RateLimiter(name="links:create"))],
+    dependencies=[
+        Depends(RateLimiter(name="links:create", identifier=user_aware_identifier))
+    ],
 )
 async def create_short_link(
     body: LinkCreate,
@@ -37,7 +50,7 @@ async def create_short_link(
 
 
 @router.get("", response_model=list[LinkResponse])
-async def get_user_links(
+async def get_my_links(
     current_user: User = Depends(get_current_user),
     service: LinkService = Depends(get_link_service),
 ):
@@ -80,7 +93,12 @@ async def get_link_clicks(
     service: LinkService = Depends(get_link_service),
 ):
     return await service.get_clicks(
-        short_code, current_user.id, skip=skip, limit=limit, ip=ip, country=country
+        short_code,
+        user_id=current_user.id,
+        skip=skip,
+        limit=limit,
+        ip=ip,
+        country=country,
     )
 
 
@@ -120,7 +138,16 @@ async def redirect_to_original(
     user_agent = request.headers.get("user-agent")
     referer = request.headers.get("referer")
 
+    # 1. Instant feedback: increment clicks in Redis (atomic, <1ms)
+    await service.increment_click_redis(short_code)
+
+    # 2. Heavy work: record analytics in DB asynchronously
     background_tasks.add_task(
-        service.count_click, short_code, ip=ip, user_agent=user_agent, referer=referer
+        _background_record_click,
+        short_code,
+        ip=ip,
+        user_agent=user_agent,
+        referer=referer,
     )
+
     return RedirectResponse(url=original_url, status_code=302)

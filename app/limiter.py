@@ -3,8 +3,32 @@ from typing import Callable, Dict, Optional
 from fastapi import Request, Response
 from fastapi_limiter.depends import RateLimiter as BaseRateLimiter
 from fastapi_limiter.depends import default_callback, default_identifier
+from jose import jwt
 from pyrate_limiter import Duration, Limiter, Rate, RedisBucket
 from redis.asyncio import Redis
+
+from app.config import settings
+
+
+async def user_aware_identifier(request: Request) -> str:
+    """Identify client by user_id if authenticated, otherwise by IP."""
+    token = request.cookies.get("access_token")
+    if token:
+        try:
+            payload = jwt.decode(
+                token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+            )
+            user_id = payload.get("sub")
+            if user_id:
+                return f"user:{user_id}"
+        except Exception:
+            pass
+
+    # Fallback to IP
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0]
+    return request.client.host if request.client else "unknown"
 
 
 class LimiterManager:

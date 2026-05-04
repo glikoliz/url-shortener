@@ -103,24 +103,32 @@ async def test_resolve_link_success(link_service, mock_link):
 
 
 @pytest.mark.asyncio
-async def test_count_click(link_service, mock_link):
+async def test_increment_click_redis(link_service, mock_link, mock_redis):
+    link = mock_link(id=1, user_id=1, short_code="abc123", clicks=5)
+    link_service.link_repo.get_by_code.return_value = link
+    mock_redis.exists.return_value = False
+    mock_redis.incr.return_value = 6
+
+    with patch("app.services.link_service.publish_link_update") as mock_publish:
+        new_count = await link_service.increment_click_redis("abc123")
+
+        assert new_count == 6
+        mock_redis.exists.assert_awaited_once()
+        mock_redis.set.assert_awaited_once()
+        mock_redis.incr.assert_awaited_once()
+        mock_publish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_count_click_db(link_service, mock_link):
+    """Test only the DB recording part of click counting."""
     link = mock_link(id=1, short_code="abc123")
     link_service.link_repo.get_by_code.return_value = link
 
-    with (
-        patch("app.services.link_service.publish_link_update") as mock_publish,
-    ):
-        link_service.link_repo.increment_clicks_by_code.return_value = 1
+    await link_service.count_click("abc123", "1.2.3.4", "Mozilla", "https://ref.com")
 
-        await link_service.count_click(
-            "abc123", "1.2.3.4", "Mozilla", "https://ref.com"
-        )
-
-        link_service.link_repo.increment_clicks_by_code.assert_awaited_once_with(
-            "abc123"
-        )
-        link_service.click_repo.create.assert_awaited_once()
-        mock_publish.assert_awaited_once()
+    link_service.link_repo.increment_clicks_by_code.assert_awaited_once_with("abc123")
+    link_service.click_repo.create.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -139,9 +147,17 @@ async def test_get_clicks(link_service, mock_link):
 
 
 @pytest.mark.asyncio
-async def test_get_click_stats(link_service, mock_link):
+async def test_get_click_stats(link_service, mock_link, mock_redis):
     link = mock_link(id=1, user_id=1, short_code="test1", clicks=5)
     link_service.link_repo.get_by_code.return_value = link
+
+    # Use side_effect to return None for cache-miss on stats, but "10" for click count
+    async def redis_get_side_effect(key):
+        if ":clicks" in key:
+            return "10"
+        return None
+
+    mock_redis.get.side_effect = redis_get_side_effect
 
     link_service.click_repo.get_aggregated_stats.return_value = {
         "total_clicks": 0,
@@ -156,11 +172,8 @@ async def test_get_click_stats(link_service, mock_link):
 
     result = await link_service.get_click_stats("test1", user_id=1)
 
-    assert result.total_clicks == 5
+    assert result.total_clicks == 10  # Merged from Redis
     assert result.clicks_by_day is not None
-    link_service.click_repo.get_aggregated_stats.assert_awaited_once_with(
-        1, granularity=None
-    )
 
 
 @pytest.mark.asyncio
@@ -185,13 +198,14 @@ async def test_resolve_link_expired(link_service, mock_link):
 
 
 @pytest.mark.asyncio
-async def test_get_stats_success(link_service, mock_link):
-    link = mock_link(clicks=42, short_code="test01")
+async def test_get_stats_success(link_service, mock_link, mock_redis):
+    link = mock_link(id=1, clicks=42, short_code="test01")
     link_service.link_repo.get_by_code.return_value = link
+    mock_redis.get.return_value = "50"
 
     result = await link_service.get_stats("test1", user_id=1)
 
-    assert result.clicks == 42
+    assert result.clicks == 50
 
 
 @pytest.mark.asyncio

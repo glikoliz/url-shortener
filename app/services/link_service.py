@@ -166,6 +166,46 @@ class LinkService:
         logger.info(f"Link resolved: {short_code} -> {link.original_url}")
         return link.original_url
 
+    async def get_stats(self, short_code: str, user_id: int) -> LinkResponse:
+        link = await self._get_link_or_404(short_code)
+        if link.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not your link")
+
+        response = LinkResponse.model_validate(link)
+
+        # Get real-time click count from Redis if available
+        if self.cache.redis:
+            redis_clicks = await self.cache.redis.get(f"link:{link.id}:clicks")
+            if redis_clicks is not None:
+                response.clicks = int(redis_clicks)
+
+        return response
+
+    async def increment_click_redis(self, short_code: str) -> int | None:
+        """Increment click count in Redis for instant feedback. Returns new count."""
+        link = await self.link_repo.get_by_code(short_code)
+        if not link or not self.cache.redis:
+            return None
+
+        key = f"link:{link.id}:clicks"
+        # If key doesn't exist, initialize it from DB first
+        exists = await self.cache.redis.exists(key)
+        if not exists:
+            await self.cache.redis.set(key, str(link.clicks), ex=86400)
+
+        new_count = await self.cache.redis.incr(key)
+
+        # Notify via SSE immediately
+        await publish_link_update(
+            link.user_id,
+            {
+                "type": "link_updated",
+                "short_code": short_code,
+                "clicks": new_count,
+            },
+        )
+        return new_count
+
     async def count_click(
         self,
         short_code: str,
@@ -173,7 +213,7 @@ class LinkService:
         user_agent: str | None,
         referer: str | None,
     ) -> None:
-        """Increment click counter and record detailed analytics event."""
+        """Record detailed analytics event in DB."""
         link = await self.link_repo.get_by_code(short_code)
         if link:
             is_unique = True
@@ -191,24 +231,8 @@ class LinkService:
                 is_unique=is_unique,
             )
             await self.click_repo.create(event)
-            new_click_count = await self.link_repo.increment_clicks_by_code(short_code)
+            await self.link_repo.increment_clicks_by_code(short_code)
             await self.db.commit()
-
-            # Notify UI via SSE
-            await publish_link_update(
-                link.user_id,
-                {
-                    "type": "link_updated",
-                    "short_code": short_code,
-                    "clicks": new_click_count,
-                },
-            )
-
-    async def get_stats(self, short_code: str, user_id: int) -> LinkResponse:
-        link = await self._get_link_or_404(short_code)
-        if link.user_id != user_id:
-            raise HTTPException(status_code=403, detail="Not your link")
-        return LinkResponse.model_validate(link)
 
     async def get_clicks(
         self,
@@ -246,7 +270,15 @@ class LinkService:
         stats = await self.click_repo.get_aggregated_stats(
             link.id, granularity=granularity
         )
-        stats["total_clicks"] = link.clicks
+
+        # Use Redis clicks for total count if available
+        total_clicks = link.clicks
+        if self.cache.redis:
+            redis_clicks = await self.cache.redis.get(f"link:{link.id}:clicks")
+            if redis_clicks is not None:
+                total_clicks = int(redis_clicks)
+
+        stats["total_clicks"] = total_clicks
 
         result = ClickStatsResponse.model_validate(stats)
         await self.cache.set_stats(

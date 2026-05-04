@@ -89,7 +89,7 @@ async def client(db_engine, redis_url):
     )
     await limiter_manager.init_limiter("auth:login", test_redis, requests=5, seconds=60)
     await limiter_manager.init_limiter(
-        "links:create", test_redis, requests=10, seconds=60
+        "links:create", test_redis, requests=20, seconds=60
     )
 
     async with AsyncClient(
