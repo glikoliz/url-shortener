@@ -20,8 +20,8 @@ async def lifespan(app: FastAPI):
     redis = await init_redis()
     await limiter_manager.init_limiter("auth:register", redis, requests=3, seconds=60)
     await limiter_manager.init_limiter("auth:login", redis, requests=5, seconds=60)
-    await limiter_manager.init_limiter("links:create", redis, requests=10, seconds=60)
-    await limiter_manager.init_limiter("links:redirect", redis, requests=5, seconds=60)
+    await limiter_manager.init_limiter("links:create", redis, requests=20, seconds=60)
+    await limiter_manager.init_limiter("links:redirect", redis, requests=30, seconds=60)
     yield
     await close_redis()
     await engine.dispose()
