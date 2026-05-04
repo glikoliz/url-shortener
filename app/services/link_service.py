@@ -147,7 +147,7 @@ class LinkService:
         )
 
         await self.cache.invalidate_user_links(user_id)
-        return response_data
+        return LinkResponse.model_validate(link)
 
     async def resolve_link(self, short_code: str) -> str:
         # Cache hit: Redis TTL handles expiration — zero DB queries
@@ -204,11 +204,11 @@ class LinkService:
                 },
             )
 
-    async def get_stats(self, short_code: str, user_id: int):
+    async def get_stats(self, short_code: str, user_id: int) -> LinkResponse:
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
-        return LinkResponse.model_validate(link).model_dump(mode="json")
+        return LinkResponse.model_validate(link)
 
     async def get_clicks(
         self,
@@ -218,49 +218,54 @@ class LinkService:
         limit: int = 50,
         ip: str | None = None,
         country: str | None = None,
-    ):
+    ) -> PaginatedClickResponse:
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
 
+        # Optional: we could cache this, but pagination makes it tricky.
+        # For now, let's keep it direct to DB as it's the 'detailed' view.
         items, total = await self.click_repo.get_by_link_id(
             link.id, skip=skip, limit=limit, ip=ip, country=country
         )
 
-        return PaginatedClickResponse(items=items, total=total).model_dump(mode="json")
+        return PaginatedClickResponse(items=items, total=total)
 
     async def get_click_stats(
         self, short_code: str, user_id: int, granularity: str | None = None
-    ):
+    ) -> ClickStatsResponse:
         link = await self._get_link_or_404(short_code)
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
 
         # Try cache first
-        cached_stats = await self.cache.get_stats(short_code, granularity)
-        if cached_stats:
-            return cached_stats
+        cached_data = await self.cache.get_stats(short_code, granularity)
+        if cached_data:
+            return ClickStatsResponse.model_validate(cached_data)
 
         stats = await self.click_repo.get_aggregated_stats(
             link.id, granularity=granularity
         )
         stats["total_clicks"] = link.clicks
 
-        result = ClickStatsResponse.model_validate(stats).model_dump(mode="json")
-        await self.cache.set_stats(short_code, granularity, result)
+        result = ClickStatsResponse.model_validate(stats)
+        await self.cache.set_stats(
+            short_code, granularity, result.model_dump(mode="json")
+        )
         return result
 
-    async def get_user_links(self, user_id: int):
+    async def get_user_links(self, user_id: int) -> list[LinkResponse]:
         # Try cache first
-        cached_links = await self.cache.get_user_links(user_id)
-        if cached_links:
-            return cached_links
+        cached_data = await self.cache.get_user_links(user_id)
+        if cached_data:
+            return [LinkResponse.model_validate(item) for item in cached_data]
 
         links = await self.link_repo.get_by_user_id(user_id)
-        result = [
-            LinkResponse.model_validate(link).model_dump(mode="json") for link in links
-        ]
-        await self.cache.set_user_links(user_id, result)
+        result = [LinkResponse.model_validate(link) for link in links]
+
+        await self.cache.set_user_links(
+            user_id, [m.model_dump(mode="json") for m in result]
+        )
         return result
 
     async def get_updates_stream(self, user_id: int):

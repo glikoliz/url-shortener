@@ -56,8 +56,6 @@ class ClickRepository:
     async def get_aggregated_stats(
         self, link_id: int, granularity: str | None = None
     ) -> dict:
-        from sqlalchemy import func, select
-
         if not granularity:
             range_query = select(
                 func.min(ClickEvent.clicked_at).label("min_t"),
