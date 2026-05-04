@@ -208,3 +208,68 @@ async def test_create_link_rate_limit(client):
     )
     assert response.status_code == 429
     assert response.json()["detail"] == "Too Many Requests"
+
+
+@pytest.mark.asyncio
+async def test_create_link_invalid_custom_code(client):
+    token = await _get_token(client, email="invalid_code@test.com")
+
+    response = await client.post(
+        "/api/v1/links",
+        json={
+            "original_url": "https://example.com",
+            "custom_code": "code-with-hyphens!",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+    assert "Custom code must contain only alphanumeric characters" in str(
+        response.json()
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_link_clicks_with_filters(client):
+    token = await _get_token(client, email="filter@test.com")
+
+    await client.post(
+        "/api/v1/links",
+        json={"original_url": "https://example.com", "custom_code": "filtered"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    await client.get("/s/filtered")
+
+    response = await client.get(
+        "/api/v1/links/filtered/clicks?ip=999.999.999.999",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 0
+
+    response = await client.get(
+        "/api/v1/links/filtered/clicks?country=Mars",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_link_stats_forbidden(client):
+    token_owner = await _get_token(client, email="owner_stats@test.com")
+    token_other = await _get_token(client, email="other_stats@test.com")
+
+    create_response = await client.post(
+        "/api/v1/links",
+        json={"original_url": "https://example.com", "custom_code": "privatelink"},
+        headers={"Authorization": f"Bearer {token_owner}"},
+    )
+    assert create_response.status_code == 201
+
+    response = await client.get(
+        "/api/v1/links/privatelink/stats",
+        headers={"Authorization": f"Bearer {token_other}"},
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not your link"
