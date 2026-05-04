@@ -20,7 +20,7 @@ const LinksTable = ({ links, isLoading, onDelete }: LinksTableProps) => {
     if (!window.confirm('Are you sure you want to delete this link?')) return;
 
     try {
-      await apiClient(`/links/${shortCode}`, { method: 'DELETE' });
+      await apiClient(`/links/i/${shortCode}`, { method: 'DELETE' });
       if (onDelete) onDelete();
     } catch {
       alert('Failed to delete link');

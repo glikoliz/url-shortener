@@ -22,7 +22,7 @@ export const useSSE = (onEvent: (data: SSEEvent) => void) => {
     const connect = () => {
       const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000/api/v1';
       const currentToken = localStorage.getItem('token') || token;
-      const url = `${API_URL}/links/stream?token=${encodeURIComponent(currentToken)}`;
+      const url = `${API_URL}/links/events/stream?token=${encodeURIComponent(currentToken)}`;
 
       eventSource = new EventSource(url);
 

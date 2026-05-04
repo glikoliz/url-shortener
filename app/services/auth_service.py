@@ -78,7 +78,11 @@ class AuthService:
         expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.jwt_expiration_minutes
         )
-        payload = {"sub": str(user_id), "exp": expire, "type": "access"}
+        payload = {
+            "sub": str(user_id),
+            "exp": int(expire.timestamp()),
+            "type": "access",
+        }
         return jwt.encode(
             payload, settings.jwt_secret, algorithm=settings.jwt_algorithm
         )

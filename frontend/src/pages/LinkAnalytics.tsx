@@ -169,18 +169,30 @@ const LinkAnalytics = () => {
   const CLICKS_PER_PAGE = 25;
 
   // Stats Query
-  const { data: stats, isLoading: loadingStats, error: statsError } = useQuery<LinkStats>({
+  const {
+    data: stats,
+    isLoading: loadingStats,
+    isError: isStatsError,
+    error: statsError
+  } = useQuery<LinkStats>({
     queryKey: ['linkStats', code, selectedGranularity],
-    queryFn: () => apiClient(selectedGranularity ? `/links/${code}/stats?granularity=${selectedGranularity}` : `/links/${code}/stats`),
+    queryFn: () => apiClient(selectedGranularity ? `/links/i/${code}/stats?granularity=${selectedGranularity}` : `/links/i/${code}/stats`),
     enabled: !!code,
+    retry: false, // Don't retry on 403/404
   });
 
   // Clicks Query
   const skip = (currentPage - 1) * CLICKS_PER_PAGE;
-  const { data: clicksData, isLoading: loadingClicks } = useQuery<ClicksResponse>({
+  const {
+    data: clicksData,
+    isLoading: loadingClicks,
+    isError: isClicksError,
+    error: clicksError
+  } = useQuery<ClicksResponse>({
     queryKey: ['linkClicks', code, currentPage, ipFilter, countryFilter],
-    queryFn: () => apiClient(`/links/${code}/clicks?limit=${CLICKS_PER_PAGE}&skip=${skip}&ip=${ipFilter}&country=${countryFilter}`),
+    queryFn: () => apiClient(`/links/i/${code}/clicks?limit=${CLICKS_PER_PAGE}&skip=${skip}&ip=${ipFilter}&country=${countryFilter}`),
     enabled: !!code,
+    retry: false,
   });
 
   const clicks = clicksData?.items || [];
@@ -199,9 +211,14 @@ const LinkAnalytics = () => {
     queryClient.invalidateQueries({ queryKey: ['linkClicks', code] });
   };
 
-  const error = (statsError as any)?.message;
-  const isForbidden = error?.includes('Not your link') || error?.includes('Forbidden');
-  const isNotFound = error?.includes('not found');
+  const combinedError = (statsError as any)?.message || (clicksError as any)?.message;
+  const isForbidden = (isStatsError || isClicksError) && (
+    combinedError?.toLowerCase().includes('not your link') ||
+    combinedError?.toLowerCase().includes('forbidden') ||
+    combinedError?.toLowerCase().includes('access denied') ||
+    combinedError?.toLowerCase().includes('permission')
+  );
+  const isNotFound = (isStatsError || isClicksError) && combinedError?.toLowerCase().includes('not found');
 
   const topCountry = stats?.top_countries?.[0]?.country || 'Unknown';
   const totalUniqueClicks = stats?.unique_ips || 0;
@@ -243,6 +260,7 @@ const LinkAnalytics = () => {
     return sortConfig.direction === 'asc' ? <ChevronUp size={14} color="var(--accent-color)" /> : <ChevronDown size={14} color="var(--accent-color)" />;
   };
 
+  // 1. Check for Forbidden first
   if (isForbidden) {
     return (
       <div style={{ padding: '60px 20px', display: 'flex', justifyContent: 'center' }} className="animate-fade-in">
@@ -270,7 +288,7 @@ const LinkAnalytics = () => {
           <button
             onClick={() => navigate('/')}
             style={{
-              background: 'var(--accent-gradient)',
+              background: 'var(--accent-color)',
               color: '#000',
               border: 'none',
               padding: '12px 24px',
@@ -292,6 +310,7 @@ const LinkAnalytics = () => {
     );
   }
 
+  // 2. Check for Not Found
   if (isNotFound) {
      return (
       <div style={{ padding: '60px 20px', display: 'flex', justifyContent: 'center' }} className="animate-fade-in">
@@ -300,8 +319,31 @@ const LinkAnalytics = () => {
           <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>
             The link you are looking for does not exist or has been deleted.
           </p>
-          <button onClick={() => navigate('/')} className="btn-primary">Back to Dashboard</button>
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              background: 'var(--accent-color)',
+              color: '#000',
+              padding: '12px 24px',
+              borderRadius: '12px',
+              fontWeight: '600'
+            }}
+          >
+            Back to Dashboard
+          </button>
         </GlassCard>
+      </div>
+    );
+  }
+
+  // 3. Show global loading state if we have no data and no error yet
+  if ((loadingStats || loadingClicks) && !stats && clicks.length === 0) {
+    return (
+      <div style={{ padding: '100px 20px', textAlign: 'center', color: 'var(--text-secondary)' }} className="animate-fade-in">
+        <div className="loader" style={{ marginBottom: '20px' }}>
+           <RefreshCw size={40} className="animate-spin" style={{ animation: 'spin 1s linear infinite', margin: '0 auto' }} />
+        </div>
+        <p>Loading analytics data...</p>
       </div>
     );
   }

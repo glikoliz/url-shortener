@@ -44,7 +44,7 @@ async def get_user_links(
     return await service.get_user_links(current_user.id)
 
 
-@router.get("/stream")
+@router.get("/events/stream")
 async def stream_link_updates(
     user_id: int = Depends(get_user_id_from_token),
     service: LinkService = Depends(get_link_service),
@@ -60,7 +60,7 @@ async def stream_link_updates(
     )
 
 
-@router.get("/{short_code}", response_model=LinkResponse)
+@router.get("/i/{short_code}/info", response_model=LinkResponse)
 async def get_link_info(
     short_code: str,
     current_user: User = Depends(get_current_user),
@@ -69,7 +69,7 @@ async def get_link_info(
     return await service.get_stats(short_code, current_user.id)
 
 
-@router.get("/{short_code}/clicks", response_model=PaginatedClickResponse)
+@router.get("/i/{short_code}/clicks", response_model=PaginatedClickResponse)
 async def get_link_clicks(
     short_code: str,
     skip: int = 0,
@@ -84,7 +84,7 @@ async def get_link_clicks(
     )
 
 
-@router.get("/{short_code}/stats", response_model=ClickStatsResponse)
+@router.get("/i/{short_code}/stats", response_model=ClickStatsResponse)
 async def get_link_stats(
     short_code: str,
     granularity: str | None = None,
@@ -96,7 +96,7 @@ async def get_link_stats(
     )
 
 
-@router.delete("/{short_code}", status_code=204)
+@router.delete("/i/{short_code}", status_code=204)
 async def delete_link(
     short_code: str,
     current_user: User = Depends(get_current_user),
