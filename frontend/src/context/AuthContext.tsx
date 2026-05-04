@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import type { User } from '../types';
 
@@ -14,57 +15,79 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const checkAuth = async () => {
-    try {
-      const userData = await apiClient('/auth/me');
-      setUser(userData);
-    } catch {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fetch user profile
+  const { data: user, isLoading: loading, refetch: checkAuth } = useQuery({
+    queryKey: ['user'],
+    queryFn: async () => {
+      try {
+        return await apiClient('/auth/me');
+      } catch {
+        return null;
+      }
+    },
+    staleTime: Infinity, // User profile doesn't change often
+    gcTime: Infinity,
+  });
+
+  const loginMutation = useMutation({
+    mutationFn: async ({ email, password }: any) => {
+      const formData = new FormData();
+      formData.append('username', email);
+      formData.append('password', password);
+
+      return await apiClient('/auth/login', {
+        body: formData,
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      // Invalidate and refetch user profile after login
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+    },
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient('/auth/logout', { method: 'POST' });
+    },
+    onSuccess: () => {
+      queryClient.setQueryData(['user'], null);
+      window.location.href = '/login';
+    },
+  });
+
+  const registerMutation = useMutation({
+    mutationFn: async ({ email, password }: any) => {
+      return await apiClient('/auth/register', {
+        body: { email, password },
+        method: 'POST',
+      });
+    },
+  });
 
   const login = async (email: string, password: string) => {
-    const formData = new FormData();
-    formData.append('username', email);
-    formData.append('password', password);
-
-    const data = await apiClient('/auth/login', {
-      body: formData,
-      method: 'POST',
-    });
-
-    await checkAuth();
-    return data;
+    return loginMutation.mutateAsync({ email, password });
   };
 
   const register = async (email: string, password: string) => {
-    const data = await apiClient('/auth/register', {
-      body: { email, password },
-      method: 'POST',
-    });
-    return data;
+    return registerMutation.mutateAsync({ email, password });
   };
 
-  const logout = async () => {
-    try {
-      await apiClient('/auth/logout', { method: 'POST' });
-    } finally {
-      setUser(null);
-      window.location.href = '/login';
-    }
+  const logout = () => {
+    logoutMutation.mutate();
   };
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, checkAuth }}>
+    <AuthContext.Provider value={{
+      user: user ?? null,
+      loading,
+      login,
+      register,
+      logout,
+      checkAuth: async () => { await checkAuth(); }
+    }}>
       {children}
     </AuthContext.Provider>
   );

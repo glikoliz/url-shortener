@@ -54,7 +54,7 @@ class AuthService:
         return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
     async def refresh_token(self, refresh_token: str) -> TokenResponse:
-        result = await self.user_repo.db.execute(
+        result = await self.db.execute(
             select(RefreshToken).where(
                 RefreshToken.token == refresh_token, RefreshToken.revoked.is_(False)
             )

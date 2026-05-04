@@ -1,4 +1,4 @@
-import json
+import asyncio
 import logging
 import secrets
 import string
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.click_event import ClickEvent
 from app.models.link import Link
-from app.redis import get_redis, publish_link_update, subscribe_to_user_updates
+from app.redis import publish_link_update, subscribe_to_user_updates
 from app.repositories.click_repository import ClickRepository
 from app.repositories.link_repository import LinkRepository
 from app.schemas.click import ClickStatsResponse, PaginatedClickResponse
@@ -146,6 +146,7 @@ class LinkService:
             },
         )
 
+        await self.cache.invalidate_user_links(user_id)
         return response_data
 
     async def resolve_link(self, short_code: str) -> str:
@@ -176,10 +177,9 @@ class LinkService:
         link = await self.link_repo.get_by_code(short_code)
         if link:
             is_unique = True
-            if ip:
-                redis = await get_redis()
+            if ip and self.cache.redis:
                 unique_key = f"unique:link:{link.id}:ip:{ip}"
-                was_set = await redis.set(unique_key, "1", ex=86400, nx=True)
+                was_set = await self.cache.redis.set(unique_key, "1", ex=86400, nx=True)
                 if not was_set:
                     is_unique = False
 
@@ -236,28 +236,52 @@ class LinkService:
         if link.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not your link")
 
+        # Try cache first
+        cached_stats = await self.cache.get_stats(short_code, granularity)
+        if cached_stats:
+            return cached_stats
+
         stats = await self.click_repo.get_aggregated_stats(
             link.id, granularity=granularity
         )
         stats["total_clicks"] = link.clicks
 
-        return ClickStatsResponse.model_validate(stats).model_dump(mode="json")
+        result = ClickStatsResponse.model_validate(stats).model_dump(mode="json")
+        await self.cache.set_stats(short_code, granularity, result)
+        return result
 
     async def get_user_links(self, user_id: int):
+        # Try cache first
+        cached_links = await self.cache.get_user_links(user_id)
+        if cached_links:
+            return cached_links
+
         links = await self.link_repo.get_by_user_id(user_id)
-        return [
+        result = [
             LinkResponse.model_validate(link).model_dump(mode="json") for link in links
         ]
+        await self.cache.set_user_links(user_id, result)
+        return result
 
     async def get_updates_stream(self, user_id: int):
-        """Generate SSE events from Redis Pub/Sub."""
+        """Generate SSE events from Redis Pub/Sub with Heartbeat."""
 
         pubsub = await subscribe_to_user_updates(user_id)
         try:
-            async for message in pubsub.listen():
-                if message["type"] == "message":
-                    data = json.loads(message["data"])
-                    yield f"data: {json.dumps(data)}\n\n"
+            yield ": ok\n\n"
+
+            while True:
+                message = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=30.0
+                )
+                if message:
+                    if message["type"] == "message":
+                        yield f"data: {message['data']}\n\n"
+                else:
+                    yield ": heartbeat\n\n"
+        except asyncio.CancelledError:
+            logger.info(f"SSE stream cancelled for user {user_id}")
+            raise
         finally:
             await pubsub.unsubscribe(f"sse:user:{user_id}")
             await pubsub.close()
@@ -272,6 +296,7 @@ class LinkService:
         await self.link_repo.delete(link)
         await self.db.commit()
         await self.cache.delete_url(short_code)
+        await self.cache.invalidate_user_links(user_id)
 
         # Publish SSE event
         await publish_link_update(

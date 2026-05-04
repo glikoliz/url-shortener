@@ -9,9 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api import auth, links
 from app.config import settings
 from app.core.exceptions import setup_exception_handlers
+from app.core.logging import setup_logging
+from app.core.middleware import RequestLoggingMiddleware
 from app.database import engine, get_db
 from app.limiter import limiter_manager
 from app.redis import close_redis, get_redis, init_redis
+
+setup_logging()
 
 
 @asynccontextmanager
@@ -37,6 +41,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestLoggingMiddleware)
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(links.router, prefix="/api/v1/links", tags=["links"])
 app.include_router(links.redirect_router, tags=["redirect"])

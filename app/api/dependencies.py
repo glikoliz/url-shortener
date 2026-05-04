@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User
+from app.redis import get_redis
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
 from app.services.link_service import LinkService
@@ -45,8 +46,10 @@ def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
     return AuthService(db)
 
 
-def get_link_service(db: AsyncSession = Depends(get_db)) -> LinkService:
-    return LinkService(db)
+def get_link_service(
+    db: AsyncSession = Depends(get_db), redis=Depends(get_redis)
+) -> LinkService:
+    return LinkService(db, redis=redis)
 
 
 def get_user_id_from_token(

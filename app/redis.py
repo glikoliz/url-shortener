@@ -1,3 +1,5 @@
+import json
+
 from redis.asyncio import Redis
 
 from app.config import settings
@@ -31,8 +33,6 @@ async def publish_link_update(user_id: int, data: dict) -> None:
     """Publish link update event to Redis for SSE."""
     if redis_client is None:
         return
-    import json
-
     channel = f"sse:user:{user_id}"
     await redis_client.publish(channel, json.dumps(data))
 

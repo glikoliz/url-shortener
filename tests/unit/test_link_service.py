@@ -108,12 +108,8 @@ async def test_count_click(link_service, mock_link):
     link_service.link_repo.get_by_code.return_value = link
 
     with (
-        patch("app.services.link_service.get_redis") as mock_get_redis,
         patch("app.services.link_service.publish_link_update") as mock_publish,
     ):
-        mock_redis = AsyncMock()
-        mock_get_redis.return_value = mock_redis
-
         link_service.link_repo.increment_clicks_by_code.return_value = 1
 
         await link_service.count_click(

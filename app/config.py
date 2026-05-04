@@ -4,7 +4,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     database_url: str
     redis_url: str = "redis://localhost:6379/0"
-    cache_ttl_seconds: int = 86400
+
+    # Cache TTLs (seconds)
+    cache_redirect_ttl: int = 3600  # 1 hour
+    cache_stats_ttl: int = 300  # 5 minutes
+    cache_user_links_ttl: int = 600  # 10 minutes
+
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_expiration_minutes: float = 30.0
@@ -16,6 +21,7 @@ class Settings(BaseSettings):
         "http://localhost:8000",
     ]
     cookie_secure: bool = True
+    log_level: str = "INFO"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
