@@ -256,5 +256,26 @@ async def test_get_link_stats_forbidden(client):
     response = await client.get(
         "/api/v1/links/i/privatelink/stats",
     )
+
     assert response.status_code == 403
     assert response.json()["error"]["message"] == "Not your link"
+
+
+@pytest.mark.asyncio
+async def test_click_persistence_to_db(client):
+    await _login(client, email="persistence@test.com")
+
+    resp = await client.post(
+        "/api/v1/links",
+        json={"original_url": "https://test.com", "custom_code": "dbtest"},
+    )
+    assert resp.status_code == 201
+
+    await client.get("/s/dbtest")
+
+    resp = await client.get("/api/v1/links/i/dbtest/clicks")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] >= 1
+    assert len(data["items"]) >= 1
+    assert data["items"][0]["ip_address"] is not None

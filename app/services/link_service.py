@@ -204,6 +204,8 @@ class LinkService:
                 "clicks": new_count,
             },
         )
+        await self.cache.invalidate_stats(short_code)
+        await self.cache.invalidate_user_links(link.user_id)
         return new_count
 
     async def count_click(
@@ -231,8 +233,15 @@ class LinkService:
                 is_unique=is_unique,
             )
             await self.click_repo.create(event)
-            await self.link_repo.increment_clicks_by_code(short_code)
+            new_db_count = await self.link_repo.increment_clicks_by_code(short_code)
             await self.db.commit()
+            logger.info(
+                f"Click recorded in DB for {short_code}. New DB count: {new_db_count}"
+            )
+        else:
+            logger.warning(
+                f"Attempted to count click for non-existent code: {short_code}"
+            )
 
     async def get_clicks(
         self,

@@ -1,12 +1,14 @@
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 
+from app import database
 from app.api.dependencies import (
     get_current_user,
     get_link_service,
     get_user_id_from_token,
 )
-from app.database import db_session
 from app.limiter import RateLimiter, user_aware_identifier
 from app.models.user import User
 from app.redis import redis_client
@@ -21,10 +23,14 @@ redirect_router = APIRouter()
 async def _background_record_click(
     short_code: str, ip: str | None, user_agent: str | None, referer: str | None
 ):
-    """Background task to record click analytics in DB using a fresh session."""
-    async with db_session() as db:
-        service = LinkService(db, redis=redis_client)
-        await service.count_click(short_code, ip, user_agent, referer)
+    try:
+        async with database.db_session() as db:
+            service = LinkService(db, redis=redis_client)
+            await service.count_click(short_code, ip, user_agent, referer)
+    except Exception as e:
+        logging.getLogger(__name__).error(
+            f"Background task failed for {short_code}: {e}", exc_info=True
+        )
 
 
 @router.post(

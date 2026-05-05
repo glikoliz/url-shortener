@@ -75,6 +75,10 @@ async def client(db_engine, redis_url):
 
     app.dependency_overrides[get_db] = _override_get_db
 
+    from app import database as app_db
+
+    app_db.db_session = TestingSessionLocal
+
     from redis.asyncio import Redis
 
     from app import redis as app_redis

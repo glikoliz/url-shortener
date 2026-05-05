@@ -31,15 +31,16 @@ const fmtDate = (iso: string) =>
 
 const parseUa = (ua: string | null) => {
   if (!ua) return 'Unknown';
-  const browsers = [
+  const browsers: [string, string][] = [
     ['Edg', 'Edge'],
     ['OPR', 'Opera'],
     ['Chrome', 'Chrome'],
     ['Firefox', 'Firefox'],
     ['Safari', 'Safari'],
   ];
+  const uaString = ua as string;
   for (const [token, name] of browsers) {
-    if (ua.includes(token)) return name;
+    if (uaString.includes(token)) return name;
   }
   return 'Other';
 };
@@ -52,6 +53,24 @@ interface CustomTooltipProps {
 
 const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (!active || !payload?.length) return null;
+
+  const formattedLabel = useMemo(() => {
+    if (!label) return '';
+    try {
+      const date = new Date(label as string);
+      if (isNaN(date.getTime())) return label as string;
+      return date.toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+    } catch (e) {
+      return label;
+    }
+  }, [label]);
+
   return (
     <div
       style={{
@@ -63,7 +82,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
         color: '#fff',
       }}
     >
-      <p style={{ color: 'var(--text-secondary)', marginBottom: '4px' }}>{label}</p>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '4px' }}>{formattedLabel}</p>
       <p style={{ color: 'var(--accent-color)', fontWeight: 600 }}>{payload[0].value} clicks</p>
     </div>
   );
@@ -464,7 +483,11 @@ const LinkAnalytics = () => {
           </div>
         ) : (stats?.clicks_by_day?.length ?? 0) > 0 ? (
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={stats?.clicks_by_day || []} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+            <AreaChart
+              data={stats?.clicks_by_day || []}
+              margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
+              style={{ outline: 'none' }}
+            >
               <defs>
                 <linearGradient id="clicksGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="var(--accent-color)" stopOpacity={0.4} />
@@ -472,7 +495,27 @@ const LinkAnalytics = () => {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#8b8e98' }} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11, fill: '#8b8e98' }}
+                tickFormatter={(val) => {
+                  if (!val) return '';
+                  try {
+                    const date = new Date(val as string);
+                    if (isNaN(date.getTime())) return val as string;
+                    const granularity = selectedGranularity || stats?.granularity || 'day';
+                    if (granularity === 'minute') {
+                      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                    }
+                    if (granularity === 'hour') {
+                      return date.toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', hour12: false });
+                    }
+                    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                  } catch (e) {
+                    return val;
+                  }
+                }}
+              />
               <YAxis tick={{ fontSize: 11, fill: '#8b8e98' }} allowDecimals={false} />
               <Tooltip content={<CustomTooltip />} />
               <Area
@@ -503,6 +546,7 @@ const LinkAnalytics = () => {
                 data={stats?.top_referers?.slice(0, 6) || []}
                 layout="vertical"
                 margin={{ top: 0, right: 10, left: 0, bottom: 0 }}
+                style={{ outline: 'none' }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11, fill: '#8b8e98' }} allowDecimals={false} />
@@ -536,6 +580,7 @@ const LinkAnalytics = () => {
                 data={stats?.top_countries?.slice(0, 6) || []}
                 layout="vertical"
                 margin={{ top: 0, right: 10, left: 0, bottom: 0 }}
+                style={{ outline: 'none' }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11, fill: '#8b8e98' }} allowDecimals={false} />
@@ -714,6 +759,8 @@ const LinkAnalytics = () => {
       <style>{`
         .hover-row:hover { background: rgba(255,255,255,0.02); }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .recharts-wrapper:focus { outline: none !important; }
+        .recharts-surface:focus { outline: none !important; }
       `}</style>
     </div>
   );

@@ -114,3 +114,15 @@ class CacheService:
             return
         await self.redis.delete(self._user_links_key(user_id))
         logger.info(f"Cache INVALIDATE [USER_LINKS] for user {user_id}")
+
+    async def invalidate_stats(self, short_code: str) -> None:
+        if not self.redis:
+            return
+        keys = [
+            self._stats_key(short_code, None),
+            self._stats_key(short_code, "day"),
+            self._stats_key(short_code, "hour"),
+            self._stats_key(short_code, "minute"),
+        ]
+        await self.redis.delete(*keys)
+        logger.info(f"Cache INVALIDATE [STATS] for {short_code}")

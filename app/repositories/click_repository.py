@@ -76,14 +76,11 @@ class ClickRepository:
 
         if granularity == "minute":
             group_func = func.date_trunc("minute", ClickEvent.clicked_at)
-            date_format = "%H:%M"
         elif granularity == "hour":
             group_func = func.date_trunc("hour", ClickEvent.clicked_at)
-            date_format = "%m-%d %H:00"
         else:
             granularity = "day"
             group_func = func.date(ClickEvent.clicked_at)
-            date_format = "%Y-%m-%d"
 
         clicks_query = (
             select(
@@ -126,8 +123,7 @@ class ClickRepository:
         countries_result = await self.db.execute(countries_query)
 
         clicks_over_time = [
-            {"date": r.period.strftime(date_format), "clicks": r.clicks}
-            for r in clicks_result.all()
+            {"date": r.period, "clicks": r.clicks} for r in clicks_result.all()
         ]
 
         return {
