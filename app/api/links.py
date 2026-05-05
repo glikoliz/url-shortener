@@ -144,10 +144,8 @@ async def redirect_to_original(
     user_agent = request.headers.get("user-agent")
     referer = request.headers.get("referer")
 
-    # 1. Instant feedback: increment clicks in Redis (atomic, <1ms)
     await service.increment_click_redis(short_code)
 
-    # 2. Heavy work: record analytics in DB asynchronously
     background_tasks.add_task(
         _background_record_click,
         short_code,

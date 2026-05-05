@@ -235,6 +235,10 @@ class LinkService:
             await self.click_repo.create(event)
             new_db_count = await self.link_repo.increment_clicks_by_code(short_code)
             await self.db.commit()
+
+            await self.cache.invalidate_stats(short_code)
+            await self.cache.invalidate_user_links(link.user_id)
+
             logger.info(
                 f"Click recorded in DB for {short_code}. New DB count: {new_db_count}"
             )
