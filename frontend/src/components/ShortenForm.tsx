@@ -4,6 +4,7 @@ import GlassCard from './GlassCard';
 import { apiClient } from '../api/client';
 import { Link2, Sparkles, Settings2, Copy, Check, AlertTriangle } from 'lucide-react';
 import { useSSESubscription } from '../context/SSEContext';
+import { useAuth } from '../context/AuthContext';
 import type { Link, SSEEvent } from '../types';
 
 interface ShortenFormProps {
@@ -19,15 +20,23 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
   const [copied, setCopied] = useState(false);
   const [bgError, setBgError] = useState<string | null>(null);
 
+  const { user } = useAuth();
   const mutation = useMutation<Link, Error, any>({
     mutationFn: (payload) => apiClient('/links', {
       method: 'POST',
       body: payload
     }),
-    onSuccess: () => {
+    onSuccess: (newLink) => {
       setOriginalUrl('');
       setCustomCode('');
       setBgError(null);
+
+      // Save to local storage for anonymous users
+      if (!user) {
+        const savedLinks = JSON.parse(localStorage.getItem('anonymous_links') || '[]');
+        localStorage.setItem('anonymous_links', JSON.stringify([newLink, ...savedLinks].slice(0, 10)));
+      }
+
       if (onShortened) onShortened();
     }
   });

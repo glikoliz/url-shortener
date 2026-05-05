@@ -50,6 +50,9 @@ export const apiClient = async (endpoint: string, { body, ...customConfig }: Api
 
     // Handle 401 Unauthorized - attempt to refresh
     if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
+      if (endpoint === '/auth/me') {
+        throw new Error('Unauthorized');
+      }
       if (!isRefreshing) {
         isRefreshing = true;
         try {
@@ -66,7 +69,10 @@ export const apiClient = async (endpoint: string, { body, ...customConfig }: Api
             return await retryResponse.json();
           } else {
             isRefreshing = false;
-            logout();
+            // Only force logout/redirect if not the initial auth check
+            if (endpoint !== '/auth/me') {
+              logout();
+            }
             throw new Error('Session expired');
           }
         } catch (e) {

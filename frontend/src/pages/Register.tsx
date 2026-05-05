@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import GlassCard from '../components/GlassCard';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, ArrowLeft } from 'lucide-react';
 
 import { useMutation } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
@@ -11,17 +11,11 @@ const Register = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const { register, login } = useAuth();
+  const { register } = useAuth();
   const navigate = useNavigate();
 
   const mutation = useMutation({
-    mutationFn: async () => {
-      if (password !== confirmPassword) {
-        throw new Error('Passwords do not match');
-      }
-      await register(email, password);
-      await login(email, password);
-    },
+    mutationFn: () => register(email, password),
     onSuccess: () => {
       navigate('/');
     }
@@ -29,6 +23,10 @@ const Register = () => {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
     mutation.mutate();
   };
 
@@ -37,6 +35,29 @@ const Register = () => {
 
   return (
     <div className="auth-container">
+      <div style={{ position: 'absolute', top: '24px', left: '24px' }}>
+        <button
+          onClick={() => navigate('/')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'var(--glass-bg)',
+            border: '1px solid var(--glass-border)',
+            padding: '8px 16px',
+            borderRadius: '12px',
+            color: 'white',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+          onMouseOut={e => e.currentTarget.style.background = 'var(--glass-bg)'}
+        >
+          <ArrowLeft size={18} />
+          Back to Home
+        </button>
+      </div>
+
       <GlassCard className="animate-fade-in" style={{ width: '100%', maxWidth: '420px' }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <div style={{

@@ -27,16 +27,16 @@ function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <DashboardLayout />
-          </ProtectedRoute>
-        }
-      >
+      <Route path="/" element={<DashboardLayout />}>
         <Route index element={<Dashboard />} />
-        <Route path="links/:code/analytics" element={<LinkAnalytics />} />
+        <Route
+          path="links/:code/analytics"
+          element={
+            <ProtectedRoute>
+              <LinkAnalytics />
+            </ProtectedRoute>
+          }
+        />
       </Route>
     </Routes>
   );

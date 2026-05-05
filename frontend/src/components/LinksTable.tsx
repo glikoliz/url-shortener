@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from './GlassCard';
 import { apiClient } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { Trash2, Copy, ExternalLink, Check, BarChart2 } from 'lucide-react';
 
 import type { Link } from '../types';
@@ -13,6 +14,7 @@ interface LinksTableProps {
 }
 
 const LinksTable = ({ links, isLoading, onDelete }: LinksTableProps) => {
+  const { user } = useAuth();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -74,7 +76,7 @@ const LinksTable = ({ links, isLoading, onDelete }: LinksTableProps) => {
             <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontSize: '14px' }}>
               <th style={{ padding: '12px 16px', fontWeight: '500' }}>Short URL</th>
               <th style={{ padding: '12px 16px', fontWeight: '500' }}>Original URL</th>
-              <th style={{ padding: '12px 16px', fontWeight: '500' }}>Clicks</th>
+              {user && <th style={{ padding: '12px 16px', fontWeight: '500' }}>Clicks</th>}
               <th style={{ padding: '12px 16px', fontWeight: '500' }}>Created</th>
               <th style={{ padding: '12px 16px', fontWeight: '500', textAlign: 'right' }}>Actions</th>
             </tr>
@@ -100,11 +102,13 @@ const LinksTable = ({ links, isLoading, onDelete }: LinksTableProps) => {
                 <td style={{ padding: '16px', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-secondary)', fontSize: '14px' }}>
                   {link.original_url}
                 </td>
-                <td style={{ padding: '16px', fontWeight: '600' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {link.clicks}
-                  </div>
-                </td>
+                {user && (
+                  <td style={{ padding: '16px', fontWeight: '600' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {link.clicks}
+                    </div>
+                  </td>
+                )}
                 <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>
                   {new Date(link.created_at).toLocaleDateString()}
                 </td>
@@ -125,36 +129,40 @@ const LinksTable = ({ links, isLoading, onDelete }: LinksTableProps) => {
                     >
                       {copiedCode === link.short_code ? <Check size={18} /> : <Copy size={18} />}
                     </button>
-                    <button
-                      onClick={() => navigate(`/links/${link.short_code}/analytics`)}
-                      style={{
-                        padding: '8px',
-                        background: 'rgba(56,189,248,0.1)',
-                        borderRadius: '8px',
-                        color: 'var(--accent-color)',
-                        transition: 'all 0.2s'
-                      }}
-                      title="Analytics"
-                      onMouseOver={e => e.currentTarget.style.background = 'rgba(56,189,248,0.2)'}
-                      onMouseOut={e => e.currentTarget.style.background = 'rgba(56,189,248,0.1)'}
-                    >
-                      <BarChart2 size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(link.short_code)}
-                      style={{
-                        padding: '8px',
-                        background: 'rgba(244,63,94,0.1)',
-                        borderRadius: '8px',
-                        color: 'var(--error-color)',
-                        transition: 'all 0.2s'
-                      }}
-                      title="Delete"
-                      onMouseOver={e => e.currentTarget.style.background = 'rgba(244,63,94,0.2)'}
-                      onMouseOut={e => e.currentTarget.style.background = 'rgba(244,63,94,0.1)'}
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    {user && (
+                      <>
+                        <button
+                          onClick={() => navigate(`/links/${link.short_code}/analytics`)}
+                          style={{
+                            padding: '8px',
+                            background: 'rgba(56,189,248,0.1)',
+                            borderRadius: '8px',
+                            color: 'var(--accent-color)',
+                            transition: 'all 0.2s'
+                          }}
+                          title="Analytics"
+                          onMouseOver={e => e.currentTarget.style.background = 'rgba(56,189,248,0.2)'}
+                          onMouseOut={e => e.currentTarget.style.background = 'rgba(56,189,248,0.1)'}
+                        >
+                          <BarChart2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(link.short_code)}
+                          style={{
+                            padding: '8px',
+                            background: 'rgba(244,63,94,0.1)',
+                            borderRadius: '8px',
+                            color: 'var(--error-color)',
+                            transition: 'all 0.2s'
+                          }}
+                          title="Delete"
+                          onMouseOver={e => e.currentTarget.style.background = 'rgba(244,63,94,0.2)'}
+                          onMouseOut={e => e.currentTarget.style.background = 'rgba(244,63,94,0.1)'}
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
