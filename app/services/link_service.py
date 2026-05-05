@@ -114,6 +114,7 @@ class LinkService:
                 await self.db.refresh(link)
                 break
             except IntegrityError:
+                await self.db.rollback()
                 if custom_code:
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
@@ -128,6 +129,9 @@ class LinkService:
                         detail="Failed to generate unique short code",
                     )
                 continue
+            except Exception:
+                await self.db.rollback()
+                raise
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -234,14 +238,19 @@ class LinkService:
             )
             await self.click_repo.create(event)
             new_db_count = await self.link_repo.increment_clicks_by_code(short_code)
-            await self.db.commit()
+            try:
+                await self.db.commit()
 
-            await self.cache.invalidate_stats(short_code)
-            await self.cache.invalidate_user_links(link.user_id)
+                await self.cache.invalidate_stats(short_code)
+                await self.cache.invalidate_user_links(link.user_id)
 
-            logger.info(
-                f"Click recorded in DB for {short_code}. New DB count: {new_db_count}"
-            )
+                logger.info(
+                    f"Click recorded in DB for {short_code}\
+                    . New DB count: {new_db_count}"
+                )
+            except Exception:
+                await self.db.rollback()
+                raise
         else:
             logger.warning(
                 f"Attempted to count click for non-existent code: {short_code}"
@@ -343,8 +352,12 @@ class LinkService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only delete your own links",
             )
-        await self.link_repo.delete(link)
-        await self.db.commit()
+        try:
+            await self.link_repo.delete(link)
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
         await self.cache.delete_url(short_code)
         await self.cache.invalidate_user_links(user_id)
 

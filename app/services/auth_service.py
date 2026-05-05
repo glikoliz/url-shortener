@@ -35,8 +35,12 @@ class AuthService:
             )
         password_hash = pwd_context.hash(password)
         user = await self.user_repo.create(email=email, password_hash=password_hash)
-        await self.db.commit()
-        await self.db.refresh(user)
+        try:
+            await self.db.commit()
+            await self.db.refresh(user)
+        except Exception:
+            await self.db.rollback()
+            raise
         logger.info(f"New user registered: {email}")
         return UserResponse.model_validate(user)
 
@@ -68,8 +72,12 @@ class AuthService:
             )
 
         # Rotate token: revoke old one and create new one
-        token_record.revoked = True
-        await self.db.commit()
+        try:
+            token_record.revoked = True
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
 
         access_token = self._create_access_token(token_record.user_id)
         new_refresh_token = await self._create_refresh_token(token_record.user_id)
@@ -97,8 +105,12 @@ class AuthService:
         )
 
         new_token = RefreshToken(token=token, user_id=user_id, expires_at=expire)
-        self.db.add(new_token)
-        await self.db.commit()
+        try:
+            self.db.add(new_token)
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
 
         return token
 
