@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { OptimizedSSEProvider } from './context/SSEContext'
 import './index.css'
 import App from './App'
 
@@ -24,7 +25,9 @@ createRoot(rootElement).render(
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <App />
+          <OptimizedSSEProvider>
+            <App />
+          </OptimizedSSEProvider>
         </AuthProvider>
       </QueryClientProvider>
     </BrowserRouter>

@@ -6,7 +6,7 @@ import ShortenForm from '../components/ShortenForm';
 import LinksTable from '../components/LinksTable';
 import LiveIndicator from '../components/LiveIndicator';
 import { apiClient } from '../api/client';
-import { useSSE } from '../hooks/useSSE';
+import { useSSESubscription, useSSEStatus } from '../context/SSEContext';
 import type { Link, SSEEvent } from '../types';
 
 const Dashboard = () => {
@@ -22,7 +22,9 @@ const Dashboard = () => {
     totalClicks: links.reduce((acc, link) => acc + (link.clicks || 0), 0)
   }), [links]);
 
-  const { isConnected, error: sseError } = useSSE((data: SSEEvent) => {
+  const { isConnected, error: sseError } = useSSEStatus();
+
+  useSSESubscription((data: SSEEvent) => {
     if (data.type === 'link_created' && data.link) {
       queryClient.setQueryData<Link[]>(['links'], (prev) => [data.link!, ...(prev || [])]);
     } else if (data.type === 'link_deleted' && data.short_code) {

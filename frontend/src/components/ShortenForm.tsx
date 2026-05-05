@@ -1,11 +1,10 @@
-import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import GlassCard from './GlassCard';
 import { apiClient } from '../api/client';
-import { Link2, Sparkles, Settings2, Copy, Check } from 'lucide-react';
-
-import type { Link } from '../types';
+import { Link2, Sparkles, Settings2, Copy, Check, AlertTriangle } from 'lucide-react';
+import { useSSESubscription } from '../context/SSEContext';
+import type { Link, SSEEvent } from '../types';
 
 interface ShortenFormProps {
   onShortened?: () => void;
@@ -18,6 +17,7 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
   const [ttlDays, setTtlDays] = useState<string | number>(30);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [bgError, setBgError] = useState<string | null>(null);
 
   const mutation = useMutation<Link, Error, any>({
     mutationFn: (payload) => apiClient('/links', {
@@ -27,16 +27,35 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
     onSuccess: () => {
       setOriginalUrl('');
       setCustomCode('');
+      setBgError(null);
       if (onShortened) onShortened();
     }
   });
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const isLoading = mutation.isPending;
+  const error = mutation.error?.message;
+  const result = mutation.data;
 
-    const payload = {
+  // Subscribe to global SSE events
+  useSSESubscription((data: SSEEvent) => {
+    if (data.type === 'link_deleted' && result && data.short_code === result.short_code) {
+      if (data.reason === 'recursive_loop') {
+        setBgError('Recursive loop detected. This link is not allowed and has been removed.');
+      }
+    }
+  });
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBgError(null);
+
+    const payload: {
+      original_url: string;
+      ttl_minutes: number | null;
+      custom_code?: string;
+    } = {
       original_url: originalUrl,
-      ttl_minutes: ttlDays ? parseInt(ttlDays) * 24 * 60 : null
+      ttl_minutes: ttlDays ? parseInt(ttlDays.toString()) * 24 * 60 : null
     };
 
     if (customCode.trim()) {
@@ -47,16 +66,12 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
   };
 
   const handleCopy = () => {
-    if (mutation.data?.short_url) {
-      navigator.clipboard.writeText(mutation.data.short_url);
+    if (result?.short_url) {
+      navigator.clipboard.writeText(result.short_url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
-
-  const isLoading = mutation.isPending;
-  const error = mutation.error?.message;
-  const result = mutation.data;
 
   return (
     <GlassCard>
@@ -66,7 +81,6 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
       </h2>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
         {error && (
           <div style={{
             background: 'rgba(255, 51, 102, 0.1)',
@@ -115,13 +129,9 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
               fontSize: '16px',
               transition: 'background-color 0.2s, transform 0.1s',
               opacity: isLoading ? 0.7 : 1,
-              transform: isLoading ? 'none' : 'translateY(0)',
               cursor: isLoading ? 'not-allowed' : 'pointer',
               whiteSpace: 'nowrap'
             }}
-            onMouseDown={e => { if (!isLoading) e.currentTarget.style.transform = 'scale(0.96)' }}
-            onMouseUp={e => { if (!isLoading) e.currentTarget.style.transform = 'scale(1)' }}
-            onMouseLeave={e => { if (!isLoading) e.currentTarget.style.transform = 'scale(1)' }}
           >
             {isLoading ? 'Shortening...' : 'Shorten'}
           </button>
@@ -164,8 +174,6 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
                 value={customCode}
                 onChange={e => setCustomCode(e.target.value)}
                 maxLength={20}
-                pattern="^[a-zA-Z0-9]+$"
-                title="Only alphanumeric characters are allowed"
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -183,7 +191,6 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
                 type="number"
                 min="1"
                 max="365"
-                placeholder="30"
                 value={ttlDays}
                 onChange={e => setTtlDays(e.target.value)}
                 style={{
@@ -201,8 +208,26 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
         )}
       </form>
 
-      {/* Result Section */}
-      {result && (
+      {/* Background Error State (Recursive Loop Detected) */}
+      {bgError && (
+        <div className="animate-fade-in" style={{
+          marginTop: '24px',
+          padding: '20px',
+          background: 'rgba(255, 51, 102, 0.1)',
+          border: '1px solid var(--error-color)',
+          borderRadius: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          color: 'var(--error-color)'
+        }}>
+          <AlertTriangle size={24} />
+          <p style={{ fontSize: '14px', fontWeight: '500' }}>{bgError}</p>
+        </div>
+      )}
+
+      {/* Result Section (Only if no background error) */}
+      {result && !bgError && (
         <div className="animate-fade-in" style={{
           marginTop: '24px',
           padding: '20px',
@@ -238,7 +263,6 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
           </button>
         </div>
       )}
-
     </GlassCard>
   );
 };

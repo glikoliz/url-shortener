@@ -25,6 +25,7 @@ export interface SSEEvent {
   link?: Link;
   short_code?: string;
   clicks?: number;
+  reason?: string;
 }
 
 export interface Click {

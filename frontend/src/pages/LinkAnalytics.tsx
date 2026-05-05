@@ -15,7 +15,7 @@ import { ArrowLeft, MousePointerClick, Globe, Link2, RefreshCw, ChevronUp, Chevr
 import { apiClient } from '../api/client';
 import GlassCard from '../components/GlassCard';
 import LiveIndicator from '../components/LiveIndicator';
-import { useSSE } from '../hooks/useSSE';
+import { useSSESubscription, useSSEStatus } from '../context/SSEContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LinkStats, ClicksResponse, SSEEvent, Click } from '../types';
@@ -43,6 +43,15 @@ const parseUa = (ua: string | null) => {
     if (uaString.includes(token)) return name;
   }
   return 'Other';
+};
+
+const getFlagEmoji = (countryCode: string) => {
+  if (!countryCode || countryCode === 'Unknown' || countryCode.length !== 2) return '🏳️';
+  const codePoints = countryCode
+    .toUpperCase()
+    .split('')
+    .map(char => 127397 + char.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
 };
 
 interface CustomTooltipProps {
@@ -157,6 +166,7 @@ const ClickRow = ({ click }: { click: Click }) => (
     </td>
     <td style={{ padding: '12px 16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ fontSize: '16px' }}>{getFlagEmoji(click.country || 'Unknown')}</span>
         {click.country || 'Unknown'}
         {click.is_unique && (
           <span style={{
@@ -222,7 +232,9 @@ const LinkAnalytics = () => {
   const totalClicksCount = clicksData?.total || 0;
 
   // Real-time updates
-  const { isConnected, error: sseError } = useSSE((data: SSEEvent) => {
+  const { isConnected, error: sseError } = useSSEStatus();
+
+  useSSESubscription((data: SSEEvent) => {
     if (data.type === 'link_updated' && data.short_code === code) {
       queryClient.invalidateQueries({ queryKey: ['linkStats', code] });
       queryClient.invalidateQueries({ queryKey: ['linkClicks', code] });
@@ -243,7 +255,32 @@ const LinkAnalytics = () => {
   );
   const isNotFound = (isStatsError || isClicksError) && combinedError?.toLowerCase().includes('not found');
 
-  const topCountry = stats?.top_countries?.[0]?.country || 'Unknown';
+  const topCountries = useMemo(() => {
+    return stats?.top_countries?.map(c => ({
+      ...c,
+      country: c.country || 'Unknown'
+    })) || [];
+  }, [stats]);
+
+  const topSources = useMemo(() => {
+    return stats?.top_referers?.map(r => {
+      const name = r.referer || 'Direct';
+      let displayName = name;
+      let domain = '';
+      if (name !== 'Direct') {
+        try {
+          const url = new URL(name.startsWith('http') ? name : `https://${name}`);
+          domain = url.hostname;
+          displayName = url.hostname.replace('www.', '');
+        } catch (e) {
+          displayName = name;
+        }
+      }
+      return { ...r, displayName, domain };
+    }) || [];
+  }, [stats]);
+
+  const topCountry = topCountries[0]?.country || 'Unknown';
   const totalUniqueClicks = stats?.unique_ips || 0;
 
   const requestSort = (key: string) => {
@@ -441,7 +478,12 @@ const LinkAnalytics = () => {
           <StatCard icon={MousePointerClick} label="Total Clicks" value={stats.total_clicks} color="var(--accent-color)" />
           <StatCard icon={MousePointerClick} label="Unique Clicks" value={stats.unique_clicks} color="#fbbf24" />
           <StatCard icon={Globe} label="Unique IPs" value={totalUniqueClicks} color="#60a5fa" />
-          <StatCard icon={Link2} label="Top Country" value={topCountry} color="#34d399" />
+          <StatCard
+            icon={() => <span style={{ fontSize: '20px' }}>{getFlagEmoji(topCountry)}</span>}
+            label="Top Country"
+            value={topCountry}
+            color="#34d399"
+          />
         </div>
       )}
 
@@ -536,72 +578,90 @@ const LinkAnalytics = () => {
       </GlassCard>
 
       {/* Bottom row: referers + countries */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-        {/* Top Referers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+        {/* Top Sources */}
         <GlassCard>
-          <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>Top Sources</h2>
-          {(stats?.top_referers?.length ?? 0) > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart
-                data={stats?.top_referers?.slice(0, 6) || []}
-                layout="vertical"
-                margin={{ top: 0, right: 10, left: 0, bottom: 0 }}
-                style={{ outline: 'none' }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: '#8b8e98' }} allowDecimals={false} />
-                <YAxis
-                  type="category"
-                  dataKey="referer"
-                  width={80}
-                  tick={{ fontSize: 11, fill: '#8b8e98' }}
-                  tickFormatter={(v) => (v && v.length > 12 ? v.slice(0, 12) + '…' : v || '')}
-                />
-                <Tooltip
-                  formatter={(v) => [v, 'clicks']}
-                  contentStyle={{ background: 'rgba(11,12,16,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '13px' }}
-                />
-                <Bar dataKey="clicks" fill="#60a5fa" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-              No data yet
-            </div>
-          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: '600' }}>Top Sources</h2>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Clicks</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {topSources.length > 0 ? topSources.slice(0, 10).map((source, i) => {
+              const percentage = stats?.total_clicks ? (source.clicks / stats.total_clicks) * 100 : 0;
+              return (
+                <div key={i} style={{ position: 'relative', overflow: 'hidden', borderRadius: '8px', background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: `${percentage}%`,
+                    background: 'linear-gradient(90deg, rgba(56,189,248,0.1) 0%, rgba(56,189,248,0.05) 100%)',
+                    zIndex: 0,
+                    transition: 'width 1s ease-out'
+                  }} />
+                  <div style={{ position: 'relative', zIndex: 1, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                      <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {source.domain ? (
+                          <img
+                            src={`https://www.google.com/s2/favicons?domain=${source.domain}&sz=32`}
+                            alt=""
+                            style={{ width: '14px', height: '14px' }}
+                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                          />
+                        ) : <MousePointerClick size={14} color="var(--text-secondary)" />}
+                      </div>
+                      <span style={{ fontSize: '14px', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={source.referer || 'Direct'}>
+                        {source.displayName}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--accent-color)', marginLeft: '12px' }}>{source.clicks}</span>
+                  </div>
+                </div>
+              );
+            }) : (
+              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>No data yet</div>
+            )}
+          </div>
         </GlassCard>
 
         {/* Top Countries */}
         <GlassCard>
-          <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>Top Countries</h2>
-          {(stats?.top_countries?.length ?? 0) > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart
-                data={stats?.top_countries?.slice(0, 6) || []}
-                layout="vertical"
-                margin={{ top: 0, right: 10, left: 0, bottom: 0 }}
-                style={{ outline: 'none' }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: '#8b8e98' }} allowDecimals={false} />
-                <YAxis
-                  type="category"
-                  dataKey="country"
-                  width={70}
-                  tick={{ fontSize: 11, fill: '#8b8e98' }}
-                />
-                <Tooltip
-                  formatter={(v) => [v, 'clicks']}
-                  contentStyle={{ background: 'rgba(11,12,16,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '13px' }}
-                />
-                <Bar dataKey="clicks" fill="#34d399" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-              No data yet
-            </div>
-          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: '600' }}>Top Countries</h2>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Clicks</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {topCountries.length > 0 ? topCountries.slice(0, 10).map((c, i) => {
+              const percentage = stats?.total_clicks ? (c.clicks / stats.total_clicks) * 100 : 0;
+              return (
+                <div key={i} style={{ position: 'relative', overflow: 'hidden', borderRadius: '8px', background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: `${percentage}%`,
+                    background: 'linear-gradient(90deg, rgba(52,211,153,0.1) 0%, rgba(52,211,153,0.05) 100%)',
+                    zIndex: 0,
+                    transition: 'width 1s ease-out'
+                  }} />
+                  <div style={{ position: 'relative', zIndex: 1, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ fontSize: '20px', width: '24px', textAlign: 'center' }}>
+                        {getFlagEmoji(c.country)}
+                      </span>
+                      <span style={{ fontSize: '14px', fontWeight: '500' }}>{c.country}</span>
+                    </div>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#34d399' }}>{c.clicks}</span>
+                  </div>
+                </div>
+              );
+            }) : (
+              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>No data yet</div>
+            )}
+          </div>
         </GlassCard>
       </div>
 
@@ -640,13 +700,13 @@ const LinkAnalytics = () => {
               }}
             >
               <option value="" style={{ background: '#1e293b', color: '#fff' }}>All Countries</option>
-              {stats?.top_countries?.map(c => (
+              {topCountries.map(c => (
                 <option
-                  key={c.country || 'null'}
-                  value={c.country || 'null'}
+                  key={c.country}
+                  value={c.country === 'Unknown' ? 'null' : c.country}
                   style={{ background: '#1e293b', color: '#fff' }}
                 >
-                  {c.country || 'Unknown'}
+                  {c.country}
                 </option>
               ))}
             </select>
