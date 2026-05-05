@@ -8,11 +8,10 @@ from jose import JWTError, jwt
 from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.uow import AbstractUnitOfWork
 from app.models.refresh_token import RefreshToken
-from app.repositories.user_repository import UserRepository
 from app.schemas.user import TokenResponse, UserResponse
 
 logger = logging.getLogger(__name__)
@@ -22,67 +21,63 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 class AuthService:
-    def __init__(self, db: AsyncSession) -> None:
-        self.db = db
-        self.user_repo = UserRepository(db)
+    def __init__(self, uow: AbstractUnitOfWork) -> None:
+        self.uow = uow
 
     async def register(self, email: str, password: str) -> UserResponse:
-        existing = await self.user_repo.get_by_email(email)
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email already registered",
-            )
-        password_hash = pwd_context.hash(password)
-        user = await self.user_repo.create(email=email, password_hash=password_hash)
-        try:
-            await self.db.commit()
-            await self.db.refresh(user)
-        except Exception:
-            await self.db.rollback()
-            raise
-        logger.info(f"New user registered: {email}")
-        return UserResponse.model_validate(user)
+        async with self.uow:
+            existing = await self.uow.users.get_by_email(email)
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Email already registered",
+                )
+            password_hash = pwd_context.hash(password)
+            user = await self.uow.users.create(email=email, password_hash=password_hash)
+            await self.uow.commit()
+            await self.uow.session.refresh(user)
+            logger.info(f"New user registered: {email}")
+            return UserResponse.model_validate(user)
 
     async def login(self, email: str, password: str) -> TokenResponse:
-        user = await self.user_repo.get_by_email(email)
-        if not user or not pwd_context.verify(password, user.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
-            )
+        async with self.uow:
+            user = await self.uow.users.get_by_email(email)
+            if not user or not pwd_context.verify(password, user.password_hash):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid email or password",
+                )
 
-        access_token = self._create_access_token(user.id)
-        refresh_token = await self._create_refresh_token(user.id)
+            access_token = self._create_access_token(user.id)
+            refresh_token = await self._create_refresh_token(user.id)
 
-        return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+            return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
     async def refresh_token(self, refresh_token: str) -> TokenResponse:
-        result = await self.db.execute(
-            select(RefreshToken).where(
-                RefreshToken.token == refresh_token, RefreshToken.revoked.is_(False)
+        async with self.uow:
+            result = await self.uow.session.execute(
+                select(RefreshToken).where(
+                    RefreshToken.token == refresh_token, RefreshToken.revoked.is_(False)
+                )
             )
-        )
-        token_record = result.scalar_one_or_none()
+            token_record = result.scalar_one_or_none()
 
-        if not token_record or token_record.is_expired:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired refresh token",
-            )
+            if not token_record or token_record.is_expired:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired refresh token",
+                )
 
-        # Rotate token: revoke old one and create new one
-        try:
+            # Rotate token: revoke old one and create new one
             token_record.revoked = True
-            await self.db.commit()
-        except Exception:
-            await self.db.rollback()
-            raise
+            await self.uow.commit()
 
-        access_token = self._create_access_token(token_record.user_id)
-        new_refresh_token = await self._create_refresh_token(token_record.user_id)
+            access_token = self._create_access_token(token_record.user_id)
+            new_refresh_token = await self._create_refresh_token(token_record.user_id)
 
-        return TokenResponse(access_token=access_token, refresh_token=new_refresh_token)
+            return TokenResponse(
+                access_token=access_token, refresh_token=new_refresh_token
+            )
 
     @staticmethod
     def _create_access_token(user_id: int) -> str:
@@ -105,12 +100,8 @@ class AuthService:
         )
 
         new_token = RefreshToken(token=token, user_id=user_id, expires_at=expire)
-        try:
-            self.db.add(new_token)
-            await self.db.commit()
-        except Exception:
-            await self.db.rollback()
-            raise
+        self.uow.session.add(new_token)
+        await self.uow.commit()
 
         return token
 
