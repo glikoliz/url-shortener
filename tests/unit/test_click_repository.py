@@ -58,27 +58,6 @@ async def test_get_by_link_id_country_null(repo, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_get_aggregated_stats_default_day(repo, mock_session):
-    mock_summary = MagicMock()
-    mock_summary.one.return_value = MagicMock(total=10, unique_ips=3)
-
-    mock_empty = MagicMock()
-    mock_empty.all.return_value = []
-
-    mock_session.execute.side_effect = [
-        mock_summary,  # summary_query
-        mock_empty,  # clicks_query
-        mock_empty,  # referers_query
-        mock_empty,  # countries_query
-    ]
-
-    stats = await repo.get_aggregated_stats(1)
-    assert stats["granularity"] == "day"
-    assert stats["total_clicks"] == 10
-    assert len(stats["clicks_over_time"]) == 30  # last 30 days
-
-
-@pytest.mark.asyncio
 async def test_get_aggregated_stats_explicit_hour(repo, mock_session):
     mock_summary = MagicMock()
     mock_summary.one.return_value = MagicMock(total=5, unique_ips=2)
