@@ -1,33 +1,14 @@
 from fastapi import APIRouter, Cookie, Depends, Response
 from fastapi.security import OAuth2PasswordRequestForm
 
+from app.api.auth_utils import delete_auth_cookies, set_auth_cookies
 from app.api.dependencies import get_auth_service, get_current_user
-from app.config import settings
 from app.limiter import RateLimiter
 from app.models.user import User
 from app.schemas.user import MessageResponse, UserRegister, UserResponse
 from app.services.auth_service import AuthService
 
 router = APIRouter()
-
-
-def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        secure=settings.cookie_secure,
-        samesite="lax",
-        max_age=int(settings.jwt_expiration_minutes) * 60,
-    )
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=settings.cookie_secure,
-        samesite="lax",
-        max_age=int(settings.refresh_token_expiration_days) * 24 * 60 * 60,
-    )
 
 
 @router.post(
@@ -69,11 +50,9 @@ async def refresh(
     return MessageResponse(message="Token refreshed")
 
 
-@router.get("/logout", response_model=MessageResponse)
 @router.post("/logout", response_model=MessageResponse)
 async def logout(response: Response):
-    response.delete_cookie(key="access_token")
-    response.delete_cookie(key="refresh_token")
+    delete_auth_cookies(response)
     return MessageResponse(message="Logged out successfully")
 
 
