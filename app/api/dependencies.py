@@ -29,7 +29,7 @@ async def get_current_user(
 def get_link_service(
     uow: AbstractUnitOfWork = Depends(get_uow), redis=Depends(get_redis)
 ) -> LinkService:
-    return LinkService(uow, redis=redis)
+    return LinkService(uow, redis=redis, uow_factory=SqlAlchemyUnitOfWork)
 
 
 def get_user_id_from_token(

@@ -1,7 +1,8 @@
 import logging
 import secrets
 import string
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 import httpx
 from fastapi import HTTPException, status
@@ -9,7 +10,7 @@ from redis.asyncio import Redis
 from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
-from app.core.uow import AbstractUnitOfWork, SqlAlchemyUnitOfWork
+from app.core.uow import AbstractUnitOfWork
 from app.models.click_event import ClickEvent
 from app.models.link import Link
 from app.redis import publish_link_update, subscribe_to_user_updates
@@ -21,10 +22,16 @@ logger = logging.getLogger(__name__)
 
 
 class LinkService:
-    def __init__(self, uow: AbstractUnitOfWork, redis: Redis | None = None) -> None:
+    def __init__(
+        self,
+        uow: AbstractUnitOfWork,
+        redis: Redis | None = None,
+        uow_factory: Callable[[], AbstractUnitOfWork] | None = None,
+    ) -> None:
         self.uow = uow
         self.redis = redis
-        self.cache = CacheService(redis)
+        self.uow_factory = uow_factory or (lambda: uow)
+        self.cache = CacheService(redis) if redis else None
 
     async def shorten_url(
         self,
@@ -35,8 +42,6 @@ class LinkService:
         ttl_minutes: int | None = None,
     ) -> LinkResponse:
         if ttl_minutes and not expires_at:
-            from datetime import timedelta
-
             expires_at = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
 
         final_url = await _resolve_final_url(original_url)
@@ -249,32 +254,32 @@ class LinkService:
             return result
 
     async def get_user_links(self, user_id: int) -> list[LinkResponse]:
+        # 1. Try to get link list from cache
         cached_data = await self.cache.get_user_links(user_id)
         if cached_data:
-            return [LinkResponse.model_validate(item) for item in cached_data]
+            result = [LinkResponse.model_validate(item) for item in cached_data]
+        else:
+            # 2. If not in cache, get from DB
+            async with self.uow:
+                links = await self.uow.links.get_by_user_id(user_id)
+                result = [LinkResponse.model_validate(link) for link in links]
 
-        async with self.uow:
-            links = await self.uow.links.get_by_user_id(user_id)
-            result = [LinkResponse.model_validate(link) for link in links]
-
-            # Sync with real-time Redis clicks if available
-            if self.redis and result:
-                # Prepare keys for MGET
-                keys = [f"link:{m.id}:clicks" for m in result]
-                redis_counts = await self.redis.mget(keys)
-
-                # Update counts in response models
-                for model, count in zip(result, redis_counts):
-                    if count is not None:
-                        model.clicks = int(count)
-
-            # We DON'T cache user links list in Redis if it's dynamic/real-time,
-            # or we accept that the cache might be slightly behind.
-            # For now, let's keep the cache but update it with fresh Redis values.
+            # 3. Store baseline in cache
             await self.cache.set_user_links(
                 user_id, [m.model_dump(mode="json") for m in result]
             )
-            return result
+
+        # 4. ALWAYS sync with real-time Redis clicks if available.
+        # This ensures counts are accurate even if the link list itself is cached.
+        if self.redis and result:
+            keys = [f"link:{m.id}:clicks" for m in result]
+            redis_counts = await self.redis.mget(keys)
+
+            for model, count in zip(result, redis_counts):
+                if count is not None:
+                    model.clicks = int(count)
+
+        return result
 
     async def delete_link(self, short_code: str, user_id: int) -> None:
         async with self.uow:
@@ -296,16 +301,12 @@ class LinkService:
         Generator for Server-Sent Events.
         Listen to Redis pubsub and yield formatted events.
         """
-        pubsub = await subscribe_to_user_updates(user_id)
-        try:
+        async with subscribe_to_user_updates(user_id) as pubsub:
             yield ": ping\n\n"
 
             async for message in pubsub.listen():
                 if message["type"] == "message":
                     yield f"data: {message['data']}\n\n"
-        finally:
-            await pubsub.unsubscribe()
-            await pubsub.aclose()
 
     async def _get_link_or_404(self, short_code: str) -> Link:
         link = await self.uow.links.get_by_code(short_code)
@@ -329,7 +330,7 @@ class LinkService:
         Creates its own UnitOfWork to run outside of request scope.
         """
         try:
-            async with SqlAlchemyUnitOfWork() as uow:
+            async with self.uow_factory() as uow:
                 service = LinkService(uow, self.redis)
                 await service.count_click(short_code, ip, user_agent, referer)
         except Exception as e:

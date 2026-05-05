@@ -1,9 +1,14 @@
 import json
+import logging
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 from redis.asyncio import Redis
 from redis.asyncio.client import PubSub
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 redis_client: Redis | None = None
 
@@ -33,15 +38,30 @@ async def get_redis() -> Redis:
 async def publish_link_update(user_id: int, data: dict) -> None:
     """Publish link update event to Redis for SSE."""
     if redis_client is None:
+        logger.warning(
+            f"Redis not initialized. Cannot publish update for user {user_id}"
+        )
         return
-    channel = f"sse:user:{user_id}"
-    await redis_client.publish(channel, json.dumps(data))
+
+    try:
+        channel = f"sse:user:{user_id}"
+        await redis_client.publish(channel, json.dumps(data))
+    except Exception as e:
+        logger.error(
+            f"Failed to publish link update for user {user_id}: {e}", exc_info=True
+        )
 
 
-async def subscribe_to_user_updates(user_id: int) -> PubSub:
-    """Subscribe to user-specific SSE channel."""
+@asynccontextmanager
+async def subscribe_to_user_updates(user_id: int) -> AsyncGenerator[PubSub, None]:
+    """Subscribe to user-specific SSE channel with automatic cleanup."""
     if redis_client is None:
         raise RuntimeError("Redis is not initialized")
+
     pubsub = redis_client.pubsub()
-    await pubsub.subscribe(f"sse:user:{user_id}")
-    return pubsub
+    try:
+        await pubsub.subscribe(f"sse:user:{user_id}")
+        yield pubsub
+    finally:
+        await pubsub.unsubscribe()
+        await pubsub.close()
