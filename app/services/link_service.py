@@ -192,13 +192,13 @@ class LinkService:
                     status_code=status.HTTP_403_FORBIDDEN, detail="Not your link"
                 )
 
-            # Sync with Redis clicks if available
+            response = LinkResponse.model_validate(link)
             if self.redis:
                 redis_clicks = await self.redis.get(f"link:{link.id}:clicks")
                 if redis_clicks is not None:
-                    link.clicks = int(redis_clicks)
+                    response.clicks = int(redis_clicks)
 
-            return LinkResponse.model_validate(link)
+            return response
 
     async def get_clicks(
         self,
@@ -256,6 +256,21 @@ class LinkService:
         async with self.uow:
             links = await self.uow.links.get_by_user_id(user_id)
             result = [LinkResponse.model_validate(link) for link in links]
+
+            # Sync with real-time Redis clicks if available
+            if self.redis and result:
+                # Prepare keys for MGET
+                keys = [f"link:{m.id}:clicks" for m in result]
+                redis_counts = await self.redis.mget(keys)
+
+                # Update counts in response models
+                for model, count in zip(result, redis_counts):
+                    if count is not None:
+                        model.clicks = int(count)
+
+            # We DON'T cache user links list in Redis if it's dynamic/real-time,
+            # or we accept that the cache might be slightly behind.
+            # For now, let's keep the cache but update it with fresh Redis values.
             await self.cache.set_user_links(
                 user_id, [m.model_dump(mode="json") for m in result]
             )
