@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, Response
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.dependencies import get_auth_service, get_current_user
@@ -64,12 +64,6 @@ async def refresh(
     refresh_token: str | None = Cookie(None),
     service: AuthService = Depends(get_auth_service),
 ):
-    if not refresh_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token missing",
-        )
-
     result = await service.refresh_token(refresh_token)
     set_auth_cookies(response, result.access_token, result.refresh_token)
     return MessageResponse(message="Token refreshed")
