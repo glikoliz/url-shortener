@@ -54,7 +54,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     },
     onSuccess: () => {
       queryClient.setQueryData(['user'], null);
-      window.location.href = '/login';
+      window.location.href = '/';
     },
   });
 

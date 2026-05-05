@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import GlassCard from '../components/GlassCard';
 import { BarChart3, Link as LinkIcon, History } from 'lucide-react';
@@ -11,6 +12,7 @@ import type { Link, SSEEvent } from '../types';
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [anonLinks, setAnonLinks] = useState<Link[]>([]);
 
@@ -81,6 +83,36 @@ const Dashboard = () => {
           <p style={{ color: 'var(--text-secondary)', fontSize: '16px', maxWidth: '600px', margin: '0 auto 32px' }}>
             Shorten your links instantly. Authorized users can also track detailed click statistics.
           </p>
+
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginBottom: '40px' }}>
+             <button
+                onClick={() => navigate('/links/DEMO/analytics')}
+                style={{
+                  background: 'rgba(56,189,248,0.1)',
+                  border: '1px solid rgba(56,189,248,0.2)',
+                  color: 'var(--accent-color)',
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={e => {
+                  e.currentTarget.style.background = 'rgba(56,189,248,0.2)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseOut={e => {
+                  e.currentTarget.style.background = 'rgba(56,189,248,0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <BarChart3 size={18} />
+                View Demo Analytics
+              </button>
+          </div>
 
           <div style={{ marginBottom: '40px' }}>
             <ShortenForm onShortened={handleRefresh} />

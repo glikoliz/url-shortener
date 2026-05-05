@@ -43,6 +43,7 @@ def mock_uow():
             "clicks_by_day": [],
             "top_referers": [],
             "top_countries": [],
+            "is_public": False,
         }
     )
 
@@ -110,6 +111,7 @@ def mock_link():
         original_url: str = "https://google.com",
         short_code: str = "abc123",
         clicks: int = 0,
+        is_public_stats: bool = False,
         expires_at=None,
     ) -> Link:
         link = Link(
@@ -118,6 +120,7 @@ def mock_link():
             original_url=original_url,
             short_code=short_code,
             clicks=clicks,
+            is_public_stats=is_public_stats,
             created_at=datetime.now(timezone.utc),
             expires_at=expires_at,
         )

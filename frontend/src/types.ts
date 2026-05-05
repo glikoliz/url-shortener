@@ -44,6 +44,7 @@ export interface LinkStats {
   top_countries: Array<{ country: string | null; clicks: number }>;
   top_referers: Array<{ referer: string | null; clicks: number }>;
   granularity?: string;
+  is_public?: boolean;
 }
 
 export interface ClicksResponse {

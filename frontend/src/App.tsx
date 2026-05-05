@@ -31,11 +31,7 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route
           path="links/:code/analytics"
-          element={
-            <ProtectedRoute>
-              <LinkAnalytics />
-            </ProtectedRoute>
-          }
+          element={<LinkAnalytics />}
         />
       </Route>
     </Routes>

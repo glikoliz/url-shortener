@@ -220,7 +220,7 @@ class LinkService:
     async def get_link_info(self, short_code: str, user_id: int) -> LinkResponse:
         async with self.uow:
             link = await self._get_link_or_404(short_code)
-            if link.user_id != user_id:
+            if link.user_id != user_id and not link.is_public_stats:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Not your link"
                 )
@@ -246,7 +246,7 @@ class LinkService:
     ) -> PaginatedClickResponse:
         async with self.uow:
             link = await self._get_link_or_404(short_code)
-            if link.user_id != user_id:
+            if link.user_id != user_id and not link.is_public_stats:
                 raise HTTPException(status_code=403, detail="Not your link")
 
             items, total = await self.uow.clicks.get_by_link_id(
@@ -275,7 +275,7 @@ class LinkService:
 
         async with self.uow:
             link = await self._get_link_or_404(short_code)
-            if link.user_id != user_id:
+            if link.user_id != user_id and not link.is_public_stats:
                 raise HTTPException(status_code=403, detail="Not your link")
 
             stats = await self.uow.clicks.get_aggregated_stats(
@@ -289,6 +289,7 @@ class LinkService:
                     total_clicks = int(redis_clicks)
 
             stats["total_clicks"] = total_clicks
+            stats["is_public"] = link.is_public_stats
             result = ClickStatsResponse.model_validate(stats)
 
             if self.cache:

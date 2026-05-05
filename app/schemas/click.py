@@ -18,6 +18,7 @@ class ClickStatsResponse(BaseModel):
     total_clicks: int
     unique_ips: int
     granularity: str | None
+    is_public: bool = False
     clicks_over_time: list[dict]
     clicks_by_day: list[dict]
     top_referers: list[dict]

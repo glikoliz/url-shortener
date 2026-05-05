@@ -28,6 +28,7 @@ class LinkResponse(BaseModel):
     clicks: int
     created_at: datetime
     expires_at: datetime | None = None
+    is_public_stats: bool = False
 
     @computed_field
     @property

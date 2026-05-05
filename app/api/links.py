@@ -57,21 +57,23 @@ async def stream_updates(
 @router.get("/i/{short_code}/info", response_model=LinkResponse)
 async def get_link_info(
     short_code: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_current_user),
     service: LinkService = Depends(get_link_service),
 ):
-    return await service.get_link_info(short_code, current_user.id)
+    return await service.get_link_info(
+        short_code, current_user.id if current_user else None
+    )
 
 
 @router.get("/i/{short_code}/stats", response_model=ClickStatsResponse)
 async def get_link_stats(
     short_code: str,
     granularity: str | None = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_current_user),
     service: LinkService = Depends(get_link_service),
 ):
     return await service.get_click_stats(
-        short_code, current_user.id, granularity=granularity
+        short_code, current_user.id if current_user else None, granularity=granularity
     )
 
 
@@ -84,12 +86,12 @@ async def get_link_clicks(
     country: str | None = None,
     sort_by: str = "clicked_at",
     sort_dir: str = "desc",
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_current_user),
     service: LinkService = Depends(get_link_service),
 ):
     return await service.get_clicks(
         short_code,
-        current_user.id,
+        current_user.id if current_user else None,
         skip=skip,
         limit=limit,
         ip=ip,

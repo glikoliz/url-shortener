@@ -32,6 +32,9 @@ class Link(Base):
         DateTime(timezone=True), default=None
     )
     clicks: Mapped[int] = mapped_column(default=text("0"), server_default=text("0"))
+    is_public_stats: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false")
+    )
 
     user: Mapped["User"] = relationship(back_populates="links")
     click_events: Mapped[list["ClickEvent"]] = relationship(
