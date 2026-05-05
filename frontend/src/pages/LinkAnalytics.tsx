@@ -14,7 +14,6 @@ import {
 import { ArrowLeft, MousePointerClick, Globe, Link2, RefreshCw, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
 import { apiClient } from '../api/client';
 import GlassCard from '../components/GlassCard';
-import LiveIndicator from '../components/LiveIndicator';
 import { useSSESubscription, useSSEStatus } from '../context/SSEContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -168,19 +167,6 @@ const ClickRow = ({ click }: { click: Click }) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={{ fontSize: '16px' }}>{getFlagEmoji(click.country || 'Unknown')}</span>
         {click.country || 'Unknown'}
-        {click.is_unique && (
-          <span style={{
-            fontSize: '10px',
-            background: 'rgba(16, 185, 129, 0.1)',
-            color: '#10b981',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            fontWeight: '600',
-            border: '1px solid rgba(16, 185, 129, 0.2)'
-          }}>
-            UNIQUE
-          </span>
-        )}
       </div>
     </td>
   </tr>
@@ -205,7 +191,7 @@ const LinkAnalytics = () => {
   const queryClient = useQueryClient();
 
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'clicked_at', direction: 'desc' });
-  const [selectedGranularity, setSelectedGranularity] = useState<string | null>(null);
+  const [selectedGranularity, setSelectedGranularity] = useState<string | null>('hour');
   const [currentPage, setCurrentPage] = useState(1);
   const [ipFilter, setIpFilter] = useState('');
   const [countryFilter, setCountryFilter] = useState('');
@@ -440,7 +426,6 @@ const LinkAnalytics = () => {
           <h1 style={{ fontSize: '22px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px' }}>
             Analytics —{' '}
             <span style={{ color: 'var(--accent-color)' }}>{code}</span>
-            <LiveIndicator isConnected={isConnected} error={sseError} />
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
             Click statistics for your short link

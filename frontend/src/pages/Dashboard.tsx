@@ -4,7 +4,6 @@ import GlassCard from '../components/GlassCard';
 import { BarChart3, Link as LinkIcon, History } from 'lucide-react';
 import ShortenForm from '../components/ShortenForm';
 import LinksTable from '../components/LinksTable';
-import LiveIndicator from '../components/LiveIndicator';
 import { apiClient } from '../api/client';
 import { useSSESubscription, useSSEStatus } from '../context/SSEContext';
 import { useAuth } from '../context/AuthContext';

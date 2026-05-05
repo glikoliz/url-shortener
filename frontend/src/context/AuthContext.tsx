@@ -72,7 +72,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const register = async (email: string, password: string) => {
-    return registerMutation.mutateAsync({ email, password });
+    await registerMutation.mutateAsync({ email, password });
+    return login(email, password);
   };
 
   const logout = () => {

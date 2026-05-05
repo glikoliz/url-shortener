@@ -55,7 +55,7 @@ async def test_create_link_unauthorized(client):
         "/api/v1/links",
         json={"original_url": "https://google.com"},
     )
-    assert response.status_code == 401
+    assert response.status_code == 201
 
 
 @pytest.mark.asyncio

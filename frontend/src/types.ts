@@ -35,12 +35,10 @@ export interface Click {
   user_agent: string | null;
   referer: string | null;
   country: string | null;
-  is_unique: boolean;
 }
 
 export interface LinkStats {
   total_clicks: number;
-  unique_clicks: number;
   unique_ips: number;
   clicks_by_day: Array<{ date: string; clicks: number }>;
   top_countries: Array<{ country: string | null; clicks: number }>;

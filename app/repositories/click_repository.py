@@ -88,14 +88,21 @@ class ClickRepository:
             time_delta = timedelta(hours=1)
             num_points = 24
             format_str = "%Y-%m-%dT%H:00:00Z"
-        else:
-            granularity = "day"
+        elif granularity == "day":
             since = now - timedelta(days=29)  # last 30 days
             since = since.replace(hour=0, minute=0, second=0, microsecond=0)
             group_func = func.date(ClickEvent.clicked_at)
             time_delta = timedelta(days=1)
             num_points = 30
             format_str = "%Y-%m-%d"
+        else:  # default
+            granularity = "hour"
+            since = now - timedelta(hours=23)  # last 24 hours
+            since = since.replace(minute=0, second=0, microsecond=0)
+            group_func = func.date_trunc("hour", ClickEvent.clicked_at)
+            time_delta = timedelta(hours=1)
+            num_points = 24
+            format_str = "%Y-%m-%dT%H:00:00Z"
 
         clicks_query = (
             select(

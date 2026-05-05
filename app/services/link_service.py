@@ -196,7 +196,6 @@ class LinkService:
                         ip_address=ip[:45] if ip else None,
                         user_agent=user_agent[:512] if user_agent else None,
                         referer=referer[:2048] if referer else None,
-                        is_unique=True,
                     )
                     await self.uow.clicks.create(event)
 

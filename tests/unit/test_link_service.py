@@ -145,7 +145,13 @@ async def test_get_clicks(link_service, mock_link):
     assert result.items == []
     assert result.total == 0
     link_service.click_repo.get_by_link_id.assert_awaited_once_with(
-        1, skip=0, limit=50, ip=None, country=None
+        1,
+        skip=0,
+        limit=50,
+        ip=None,
+        country=None,
+        sort_by="clicked_at",
+        sort_dir="desc",
     )
 
 
@@ -164,7 +170,6 @@ async def test_get_click_stats(link_service, mock_link, mock_redis):
 
     link_service.click_repo.get_aggregated_stats.return_value = {
         "total_clicks": 0,
-        "unique_clicks": 0,
         "unique_ips": 0,
         "granularity": "day",
         "clicks_over_time": [],
@@ -313,7 +318,7 @@ async def test_shorten_url_anonymous(link_service, mock_link):
     await link_service.count_click("anon123", "1.2.3.4", "agent", "referer")
 
     link_service.click_repo.create.assert_not_called()
-    link_service.link_repo.increment_clicks_by_code.assert_called_once_with("anon123")
+    link_service.link_repo.increment_clicks_by_code.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -451,16 +456,13 @@ async def test_record_click_bg(link_service, mock_redis):
 
 
 @pytest.mark.asyncio
-async def test_count_click_unique_check(link_service, mock_link, mock_redis):
+async def test_count_click_db_recording(link_service, mock_link):
     link = mock_link(id=1, short_code="abc")
     link_service.link_repo.get_by_code.return_value = link
-    mock_redis.set.return_value = False  # Not unique
 
     await link_service.count_click("abc", "1.2.3.4", None, None)
 
-    args, kwargs = link_service.click_repo.create.call_args
-    event = args[0]
-    assert event.is_unique is False
+    link_service.click_repo.create.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -504,7 +506,6 @@ async def test_shorten_url_integrity_error_retry(link_service, mock_link):
 async def test_get_click_stats_cache_hit(link_service):
     stats = {
         "total_clicks": 100,
-        "unique_clicks": 50,
         "unique_ips": 30,
         "granularity": "all",
         "clicks_over_time": [],

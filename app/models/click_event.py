@@ -32,6 +32,4 @@ class ClickEvent(Base):
     user_agent: Mapped[str | None] = mapped_column(String(512))
     referer: Mapped[str | None] = mapped_column(String(2048))
     country: Mapped[str | None] = mapped_column(String(2), index=True)
-    is_unique: Mapped[bool] = mapped_column(default=True, index=True)
-
     link: Mapped["Link"] = relationship(back_populates="click_events")
