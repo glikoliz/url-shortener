@@ -13,9 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from testcontainers.core.container import DockerContainer
 from testcontainers.postgres import PostgresContainer
 
-from app.database import Base, get_db
+from app.database import Base
 from app.main import app
-from app.redis import get_redis
 
 
 @pytest.fixture(autouse=True)
@@ -69,15 +68,24 @@ async def client(db_engine, redis_url):
         db_engine, class_=AsyncSession, expire_on_commit=False
     )
 
-    async def _override_get_db():
-        async with TestingSessionLocal() as session:
-            yield session
+    from app.api.dependencies import get_redis, get_uow
+    from app.core.uow import SqlAlchemyUnitOfWork
 
-    app.dependency_overrides[get_db] = _override_get_db
+    async def _override_get_uow():
+        uow = SqlAlchemyUnitOfWork(session_factory=TestingSessionLocal)
+        async with uow:
+            yield uow
+
+    app.dependency_overrides[get_uow] = _override_get_uow
 
     from app import database as app_db
 
     app_db.db_session = TestingSessionLocal
+    app_db.AsyncSessionLocal = TestingSessionLocal
+
+    from app.core import uow as app_uow
+
+    app_uow.AsyncSessionLocal = TestingSessionLocal
 
     from redis.asyncio import Redis
 

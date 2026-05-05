@@ -109,41 +109,36 @@ def test_verify_token_missing_sub():
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_success(mock_db):
+async def test_get_current_user_success(mock_uow):
     user = User(id=1, is_active=True)
 
     with patch("app.api.dependencies.AuthService.verify_token", return_value=1):
-        with patch(
-            "app.api.dependencies.UserRepository.get_by_id", return_value=user
-        ) as mock_get:
-            result = await get_current_user(access_token="valid_token", db=mock_db)
+        mock_uow.users.get_by_id.return_value = user
+        result = await get_current_user(access_token="valid_token", uow=mock_uow)
 
-            assert result == user
-            mock_get.assert_awaited_once_with(1)
+        assert result == user
+        mock_uow.users.get_by_id.assert_awaited_once_with(1)
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_not_found(mock_db):
+async def test_get_current_user_not_found(mock_uow):
     with patch("app.api.dependencies.AuthService.verify_token", return_value=999):
-        with patch("app.api.dependencies.UserRepository.get_by_id", return_value=None):
-            with pytest.raises(HTTPException) as exc_info:
-                await get_current_user(access_token="valid_token", db=mock_db)
+        mock_uow.users.get_by_id.return_value = None
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(access_token="valid_token", uow=mock_uow)
 
-            assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-            assert exc_info.value.detail == "User not found"
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == "User not found"
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_deactivated(mock_db):
+async def test_get_current_user_deactivated(mock_uow):
     deactivated_user = User(id=1, is_active=False)
 
     with patch("app.api.dependencies.AuthService.verify_token", return_value=1):
-        with patch(
-            "app.api.dependencies.UserRepository.get_by_id",
-            return_value=deactivated_user,
-        ):
-            with pytest.raises(HTTPException) as exc_info:
-                await get_current_user(access_token="valid_token", db=mock_db)
+        mock_uow.users.get_by_id.return_value = deactivated_user
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(access_token="valid_token", uow=mock_uow)
 
-            assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert exc_info.value.detail == "User account is deactivated"
+        assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+        assert exc_info.value.detail == "User account is deactivated"

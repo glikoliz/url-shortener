@@ -10,57 +10,30 @@ from app.services.link_service import LinkService
 
 
 @pytest.fixture
-def mock_db():
-    db = MagicMock()
-    db.commit = AsyncMock()
-    db.refresh = AsyncMock()
-    db.delete = AsyncMock()
+def mock_uow():
+    uow = MagicMock()
+    # Mock context manager
+    uow.__aenter__ = AsyncMock(return_value=uow)
+    uow.__aexit__ = AsyncMock(return_value=None)
 
-    # Setup execute to return a mock result object
-    execute_result = MagicMock()
-    row = MagicMock()
-    row.min_t = datetime.now(timezone.utc)
-    row.max_t = datetime.now(timezone.utc)
-    execute_result.one.return_value = row
-    execute_result.scalar_one_or_none.return_value = None
-    execute_result.scalar_one.return_value = 1
-    execute_result.scalars.return_value.all.return_value = []
+    # Mock repositories
+    uow.users = MagicMock()
+    uow.users.get_by_email = AsyncMock()
+    uow.users.get_by_id = AsyncMock()
+    uow.users.create = AsyncMock()
 
-    db.execute = AsyncMock(return_value=execute_result)
-    return db
+    uow.links = MagicMock()
+    uow.links.get_by_code = AsyncMock()
+    uow.links.create = AsyncMock()
+    uow.links.delete = AsyncMock()
+    uow.links.increment_clicks = AsyncMock()
+    uow.links.increment_clicks_by_code = AsyncMock()
+    uow.links.get_by_user_id = AsyncMock()
 
-
-@pytest.fixture
-def auth_service(mock_db):
-    service = AuthService(mock_db)
-    service.user_repo = MagicMock()
-    service.user_repo.get_by_email = AsyncMock()
-    service.user_repo.get_by_id = AsyncMock()
-    service.user_repo.create = AsyncMock()
-    return service
-
-
-@pytest.fixture
-def mock_redis():
-    mock = AsyncMock()
-    mock.get.return_value = None
-    return mock
-
-
-@pytest.fixture
-def link_service(mock_db, mock_redis):
-    link_repo = MagicMock()
-    link_repo.get_by_code = AsyncMock()
-    link_repo.create = AsyncMock()
-    link_repo.delete = AsyncMock()
-    link_repo.increment_clicks = AsyncMock()
-    link_repo.increment_clicks_by_code = AsyncMock()
-    link_repo.get_by_user_id = AsyncMock()
-
-    click_repo = MagicMock()
-    click_repo.create = AsyncMock()
-    click_repo.get_by_link_id = AsyncMock(return_value=([], 0))
-    click_repo.get_aggregated_stats = AsyncMock(
+    uow.clicks = MagicMock()
+    uow.clicks.create = AsyncMock()
+    uow.clicks.get_by_link_id = AsyncMock(return_value=([], 0))
+    uow.clicks.get_aggregated_stats = AsyncMock(
         return_value={
             "total_clicks": 0,
             "unique_clicks": 0,
@@ -73,9 +46,39 @@ def link_service(mock_db, mock_redis):
         }
     )
 
-    service = LinkService(
-        mock_db, redis=mock_redis, link_repo=link_repo, click_repo=click_repo
-    )
+    uow.commit = AsyncMock()
+    uow.rollback = AsyncMock()
+    uow.session = MagicMock()
+    uow.session.refresh = AsyncMock()
+    uow.session.execute = AsyncMock()
+
+    return uow
+
+
+@pytest.fixture
+def auth_service(mock_uow):
+    service = AuthService(mock_uow)
+    # Add shortcuts for tests that access repositories directly on the service
+    service.user_repo = mock_uow.users
+    return service
+
+
+@pytest.fixture
+def mock_redis():
+    mock = AsyncMock()
+    mock.get.return_value = None
+    mock.exists.return_value = False
+    mock.set.return_value = True
+    mock.incr.return_value = 1
+    return mock
+
+
+@pytest.fixture
+def link_service(mock_uow, mock_redis):
+    service = LinkService(mock_uow, redis=mock_redis)
+    # Add shortcuts for tests that access repositories directly on the service
+    service.link_repo = mock_uow.links
+    service.click_repo = mock_uow.clicks
     return service
 
 

@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import HTTPException
 
+from app.schemas.click import ClickStatsResponse
+
 
 @pytest.fixture(autouse=True)
 def mock_resolve_url():
@@ -76,16 +78,15 @@ async def test_shorten_url_custom_code_taken(link_service, mock_link):
 
 @pytest.mark.asyncio
 async def test_shorten_url_with_ttl(link_service, mock_link):
-    created_link = mock_link(
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30)
-    )
+    expires = datetime.now(timezone.utc) + timedelta(minutes=30)
+    created_link = mock_link(expires_at=expires)
     link_service.link_repo.get_by_code.return_value = None
     link_service.link_repo.create.return_value = created_link
 
     result = await link_service.shorten_url(
         original_url="https://example.com",
         user_id=1,
-        ttl_minutes=30,
+        expires_at=expires,
     )
 
     assert result.expires_at is not None
@@ -124,6 +125,7 @@ async def test_count_click_db(link_service, mock_link):
     """Test only the DB recording part of click counting."""
     link = mock_link(id=1, short_code="abc123")
     link_service.link_repo.get_by_code.return_value = link
+    link_service.link_repo.increment_clicks_by_code.return_value = 1
 
     await link_service.count_click("abc123", "1.2.3.4", "Mozilla", "https://ref.com")
 
@@ -174,6 +176,7 @@ async def test_get_click_stats(link_service, mock_link, mock_redis):
 
     assert result.total_clicks == 10  # Merged from Redis
     assert result.clicks_by_day is not None
+    assert isinstance(result, ClickStatsResponse)
 
 
 @pytest.mark.asyncio
@@ -195,27 +198,6 @@ async def test_resolve_link_expired(link_service, mock_link):
         await link_service.resolve_link("abc123")
 
     assert exc_info.value.status_code == 410
-
-
-@pytest.mark.asyncio
-async def test_get_stats_success(link_service, mock_link, mock_redis):
-    link = mock_link(id=1, clicks=42, short_code="test01")
-    link_service.link_repo.get_by_code.return_value = link
-    mock_redis.get.return_value = "50"
-
-    result = await link_service.get_stats("test1", user_id=1)
-
-    assert result.clicks == 50
-
-
-@pytest.mark.asyncio
-async def test_get_stats_not_found(link_service):
-    link_service.link_repo.get_by_code.return_value = None
-
-    with pytest.raises(HTTPException) as exc_info:
-        await link_service.get_stats("notfound", user_id=1)
-
-    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -251,26 +233,25 @@ async def test_delete_link_not_found(link_service):
 
 @pytest.mark.asyncio
 async def test_resolve_link_cache_hit(link_service, mock_redis):
-    mock_redis.get.return_value = "https://cached-url.com"
-
-    url = await link_service.resolve_link("cache1")
-
-    assert url == "https://cached-url.com"
-    link_service.link_repo.get_by_code.assert_not_awaited()
-    mock_redis.get.assert_awaited_once()
+    # Set CacheService to return something
+    with patch.object(link_service.cache, "get_url", return_value="https://cached.com"):
+        url = await link_service.resolve_link("cache1")
+        assert url == "https://cached.com"
+        link_service.link_repo.get_by_code.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_resolve_link_cache_miss(link_service, mock_link, mock_redis):
-    mock_redis.get.return_value = None
     link = mock_link(original_url="https://db-url.com", short_code="miss1")
     link_service.link_repo.get_by_code.return_value = link
 
-    url = await link_service.resolve_link("miss1")
+    with patch.object(link_service.cache, "get_url", return_value=None):
+        with patch.object(link_service.cache, "set_url") as mock_set_cache:
+            url = await link_service.resolve_link("miss1")
 
-    assert url == "https://db-url.com"
-    link_service.link_repo.get_by_code.assert_awaited_once_with("miss1")
-    mock_redis.set.assert_awaited_once()
+            assert url == "https://db-url.com"
+            link_service.link_repo.get_by_code.assert_awaited_once_with("miss1")
+            mock_set_cache.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -278,10 +259,11 @@ async def test_delete_link_invalidates_cache(link_service, mock_link, mock_redis
     link = mock_link(user_id=1, short_code="del1")
     link_service.link_repo.get_by_code.return_value = link
 
-    await link_service.delete_link("del1", user_id=1)
-
-    # One for the URL, one for the user's link list
-    assert mock_redis.delete.await_count == 2
+    with patch.object(link_service.cache, "delete_url") as m1:
+        with patch.object(link_service.cache, "invalidate_user_links") as m2:
+            await link_service.delete_link("del1", user_id=1)
+            m1.assert_awaited_once_with("del1")
+            m2.assert_awaited_once_with(1)
 
 
 @pytest.mark.asyncio
@@ -298,14 +280,16 @@ async def test_shorten_url_indirect_self_reference(link_service, mock_resolve_ur
         )
 
     assert exc_info.value.status_code == 400
-    assert "pointing to this service" in str(exc_info.value.detail)
+    assert "already a short link" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio
 async def test_shorten_url_self_redirect(link_service):
+    from app.config import settings
+
     with pytest.raises(HTTPException) as exc_info:
         await link_service.shorten_url(
-            original_url="http://localhost:8000/s/abc123",
+            original_url=f"{settings.base_url}/s/abc123",
             user_id=1,
         )
 
