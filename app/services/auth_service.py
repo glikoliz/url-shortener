@@ -53,7 +53,13 @@ class AuthService:
 
             return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
-    async def refresh_token(self, refresh_token: str) -> TokenResponse:
+    async def refresh_token(self, refresh_token: str | None) -> TokenResponse:
+        if not refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token missing",
+            )
+
         async with self.uow:
             result = await self.uow.session.execute(
                 select(RefreshToken).where(
@@ -81,12 +87,13 @@ class AuthService:
 
     @staticmethod
     def _create_access_token(user_id: int) -> str:
-        expire = datetime.now(timezone.utc) + timedelta(
-            minutes=settings.jwt_expiration_minutes
-        )
+        now = datetime.now(timezone.utc)
+        expire = now + timedelta(minutes=settings.jwt_expiration_minutes)
         payload = {
             "sub": str(user_id),
             "exp": int(expire.timestamp()),
+            "iat": int(now.timestamp()),
+            "jti": secrets.token_hex(8),
             "type": "access",
         }
         return jwt.encode(
