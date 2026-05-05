@@ -9,10 +9,10 @@ from redis.asyncio import Redis
 from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
-from app.core.uow import AbstractUnitOfWork
+from app.core.uow import AbstractUnitOfWork, SqlAlchemyUnitOfWork
 from app.models.click_event import ClickEvent
 from app.models.link import Link
-from app.redis import publish_link_update
+from app.redis import publish_link_update, subscribe_to_user_updates
 from app.schemas.click import ClickStatsResponse, PaginatedClickResponse
 from app.schemas.link import LinkResponse
 from app.services.cache_service import CacheService
@@ -129,13 +129,10 @@ class LinkService:
                 return 0
 
             key = f"link:{link.id}:clicks"
-            exists = await self.redis.exists(key)
-            if not exists:
-                await self.redis.set(key, str(link.clicks), ex=86400)
+            await self.redis.set(key, str(link.clicks), ex=86400, nx=True)
 
             new_count = await self.redis.incr(key)
 
-            # Publish SSE update
             await publish_link_update(
                 link.user_id,
                 {
@@ -279,8 +276,23 @@ class LinkService:
                 user_id, {"type": "link_deleted", "short_code": short_code}
             )
 
+    async def get_updates_stream(self, user_id: int):
+        """
+        Generator for Server-Sent Events.
+        Listen to Redis pubsub and yield formatted events.
+        """
+        pubsub = await subscribe_to_user_updates(user_id)
+        try:
+            yield ": ping\n\n"
+
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    yield f"data: {message['data']}\n\n"
+        finally:
+            await pubsub.unsubscribe()
+            await pubsub.aclose()
+
     async def _get_link_or_404(self, short_code: str) -> Link:
-        # Note: caller must be in a UoW context
         link = await self.uow.links.get_by_code(short_code)
         if not link:
             raise HTTPException(status_code=404, detail="Short link not found")
@@ -302,15 +314,11 @@ class LinkService:
         Creates its own UnitOfWork to run outside of request scope.
         """
         try:
-            from app.core.uow import SqlAlchemyUnitOfWork
-
             async with SqlAlchemyUnitOfWork() as uow:
                 service = LinkService(uow, self.redis)
                 await service.count_click(short_code, ip, user_agent, referer)
         except Exception as e:
-            import logging
-
-            logging.getLogger(__name__).error(
+            logger.error(
                 f"Background click recording failed for {short_code}: {e}",
                 exc_info=True,
             )

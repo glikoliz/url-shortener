@@ -107,15 +107,15 @@ async def test_resolve_link_success(link_service, mock_link):
 async def test_increment_click_redis(link_service, mock_link, mock_redis):
     link = mock_link(id=1, user_id=1, short_code="abc123", clicks=5)
     link_service.link_repo.get_by_code.return_value = link
-    mock_redis.exists.return_value = False
     mock_redis.incr.return_value = 6
 
     with patch("app.services.link_service.publish_link_update") as mock_publish:
         new_count = await link_service.increment_click_redis("abc123")
 
         assert new_count == 6
-        mock_redis.exists.assert_awaited_once()
-        mock_redis.set.assert_awaited_once()
+        mock_redis.set.assert_awaited_once_with(
+            f"link:{link.id}:clicks", str(link.clicks), ex=86400, nx=True
+        )
         mock_redis.incr.assert_awaited_once()
         mock_publish.assert_awaited_once()
 
