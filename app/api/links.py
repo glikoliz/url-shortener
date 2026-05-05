@@ -1,7 +1,11 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import RedirectResponse
 
-from app.api.dependencies import get_current_user, get_link_service
+from app.api.dependencies import (
+    get_current_user,
+    get_link_service,
+    get_optional_current_user,
+)
 from app.core.responses import SSEResponse
 from app.limiter import RateLimiter
 from app.models.user import User
@@ -22,12 +26,12 @@ redirect_router = APIRouter()
 async def create_link(
     link_data: LinkCreate,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_current_user),
     service: LinkService = Depends(get_link_service),
 ):
     return await service.shorten_url(
         original_url=str(link_data.original_url),
-        user_id=current_user.id,
+        user_id=current_user.id if current_user else None,
         custom_code=link_data.custom_code,
         ttl_minutes=link_data.ttl_minutes,
         background_tasks=background_tasks,

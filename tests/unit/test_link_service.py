@@ -295,6 +295,28 @@ async def test_shorten_url_indirect_self_reference(
 
 
 @pytest.mark.asyncio
+async def test_shorten_url_anonymous(link_service, mock_link):
+    created_link = mock_link(id=456, short_code="anon123", user_id=None)
+    link_service.link_repo.get_by_code.return_value = None
+    link_service.link_repo.create.return_value = created_link
+
+    res = await link_service.shorten_url(
+        user_id=None,
+        original_url="https://google.com",
+    )
+
+    assert res.short_code == "anon123"
+    assert res.user_id is None
+    link_service.link_repo.create.assert_called_once()
+
+    link_service.link_repo.get_by_code.return_value = created_link
+    await link_service.count_click("anon123", "1.2.3.4", "agent", "referer")
+
+    link_service.click_repo.create.assert_not_called()
+    link_service.link_repo.increment_clicks_by_code.assert_called_once_with("anon123")
+
+
+@pytest.mark.asyncio
 async def test_shorten_url_self_redirect(link_service):
     from app.config import settings
 

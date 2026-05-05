@@ -26,6 +26,18 @@ async def get_current_user(
     return await service.get_authenticated_user(access_token)
 
 
+async def get_optional_current_user(
+    access_token: str | None = Cookie(None),
+    service: AuthService = Depends(get_auth_service),
+) -> User | None:
+    if not access_token:
+        return None
+    try:
+        return await service.get_authenticated_user(access_token)
+    except Exception:
+        return None
+
+
 def get_link_service(
     uow: AbstractUnitOfWork = Depends(get_uow), redis=Depends(get_redis)
 ) -> LinkService:
