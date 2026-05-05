@@ -1,11 +1,8 @@
-import logging
-
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
-from fastapi.responses import RedirectResponse, StreamingResponse
-from redis.asyncio import Redis
+from fastapi.responses import RedirectResponse
 
-from app.api.dependencies import get_current_user, get_link_service, get_redis
-from app.core.uow import SqlAlchemyUnitOfWork
+from app.api.dependencies import get_current_user, get_link_service
+from app.core.responses import SSEResponse
 from app.limiter import RateLimiter
 from app.models.user import User
 from app.schemas.click import ClickStatsResponse, PaginatedClickResponse
@@ -14,23 +11,6 @@ from app.services.link_service import LinkService
 
 router = APIRouter()
 redirect_router = APIRouter()
-
-
-async def _background_record_click(
-    short_code: str,
-    ip: str | None,
-    user_agent: str | None,
-    referer: str | None,
-    redis: Redis,
-):
-    try:
-        uow = SqlAlchemyUnitOfWork()
-        service = LinkService(uow, redis=redis)
-        await service.count_click(short_code, ip, user_agent, referer)
-    except Exception as e:
-        logging.getLogger(__name__).error(
-            f"Background task failed for {short_code}: {e}", exc_info=True
-        )
 
 
 @router.post(
@@ -65,15 +45,7 @@ async def stream_updates(
     current_user: User = Depends(get_current_user),
     service: LinkService = Depends(get_link_service),
 ):
-    return StreamingResponse(
-        service.get_updates_stream(current_user.id),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    return SSEResponse(service.get_updates_stream(current_user.id))
 
 
 @router.get("/i/{short_code}/info", response_model=LinkResponse)
@@ -129,7 +101,6 @@ async def redirect_to_original(
     request: Request,
     background_tasks: BackgroundTasks,
     service: LinkService = Depends(get_link_service),
-    redis: Redis = Depends(get_redis),
 ):
     original_url = await service.resolve_link(short_code)
 
@@ -140,12 +111,11 @@ async def redirect_to_original(
     await service.increment_click_redis(short_code)
 
     background_tasks.add_task(
-        _background_record_click,
-        short_code,
+        service.record_click_bg,
+        short_code=short_code,
         ip=ip,
         user_agent=user_agent,
         referer=referer,
-        redis=redis,
     )
 
     return RedirectResponse(url=original_url, status_code=302)
