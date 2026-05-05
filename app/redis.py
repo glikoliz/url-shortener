@@ -1,6 +1,7 @@
 import json
 
 from redis.asyncio import Redis
+from redis.asyncio.client import PubSub
 
 from app.config import settings
 
@@ -37,7 +38,7 @@ async def publish_link_update(user_id: int, data: dict) -> None:
     await redis_client.publish(channel, json.dumps(data))
 
 
-async def subscribe_to_user_updates(user_id: int) -> Redis:
+async def subscribe_to_user_updates(user_id: int) -> PubSub:
     """Subscribe to user-specific SSE channel."""
     if redis_client is None:
         raise RuntimeError("Redis is not initialized")
