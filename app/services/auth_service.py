@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.core.uow import AbstractUnitOfWork
 from app.models.refresh_token import RefreshToken
+from app.models.user import User
 from app.schemas.user import TokenResponse, UserResponse
 
 logger = logging.getLogger(__name__)
@@ -113,7 +114,12 @@ class AuthService:
         return token
 
     @staticmethod
-    def verify_token(token: str) -> int:
+    def verify_token(token: str | None) -> int:
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication token missing",
+            )
         try:
             payload = jwt.decode(
                 token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
@@ -135,3 +141,20 @@ class AuthService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token",
             )
+
+    async def get_authenticated_user(self, token: str | None) -> User:
+        user_id = self.verify_token(token)
+
+        async with self.uow:
+            user = await self.uow.users.get_by_id(user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not found",
+                )
+            if not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User account is deactivated",
+                )
+            return user

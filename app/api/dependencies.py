@@ -1,6 +1,6 @@
 from typing import AsyncGenerator
 
-from fastapi import Cookie, Depends, HTTPException, Query, status
+from fastapi import Cookie, Depends, Query
 
 from app.core.uow import AbstractUnitOfWork, SqlAlchemyUnitOfWork
 from app.models.user import User
@@ -15,40 +15,15 @@ async def get_uow() -> AsyncGenerator[AbstractUnitOfWork, None]:
         yield uow
 
 
-async def get_current_user(
-    access_token: str | None = Cookie(None),
-    uow: AbstractUnitOfWork = Depends(get_uow),
-) -> User:
-    if not access_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-
-    try:
-        user_id = AuthService.verify_token(access_token)
-    except HTTPException:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-        )
-
-    user = await uow.users.get_by_id(user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is deactivated",
-        )
-    return user
-
-
 def get_auth_service(uow: AbstractUnitOfWork = Depends(get_uow)) -> AuthService:
     return AuthService(uow)
+
+
+async def get_current_user(
+    access_token: str | None = Cookie(None),
+    service: AuthService = Depends(get_auth_service),
+) -> User:
+    return await service.get_authenticated_user(access_token)
 
 
 def get_link_service(
@@ -61,10 +36,4 @@ def get_user_id_from_token(
     access_token: str | None = Cookie(None),
     token: str | None = Query(None),
 ) -> int:
-    token_to_verify = access_token or token
-    if not token_to_verify:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication token missing",
-        )
-    return AuthService.verify_token(token_to_verify)
+    return AuthService.verify_token(access_token or token)
