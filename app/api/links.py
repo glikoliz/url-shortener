@@ -82,11 +82,20 @@ async def get_link_clicks(
     limit: int = 50,
     ip: str | None = None,
     country: str | None = None,
+    sort_by: str = "clicked_at",
+    sort_dir: str = "desc",
     current_user: User = Depends(get_current_user),
     service: LinkService = Depends(get_link_service),
 ):
     return await service.get_clicks(
-        short_code, current_user.id, skip=skip, limit=limit, ip=ip, country=country
+        short_code,
+        current_user.id,
+        skip=skip,
+        limit=limit,
+        ip=ip,
+        country=country,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
 
 

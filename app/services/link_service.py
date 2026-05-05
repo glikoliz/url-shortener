@@ -192,7 +192,7 @@ class LinkService:
                     if not was_set:
                         is_unique = False
 
-                # Only record detailed click events if the link has an owner
+                # Only record and count clicks if the link has an owner
                 if link.user_id:
                     event = ClickEvent(
                         link_id=link.id,
@@ -203,18 +203,21 @@ class LinkService:
                     )
                     await self.uow.clicks.create(event)
 
-                new_db_count = await self.uow.links.increment_clicks_by_code(short_code)
+                    new_db_count = await self.uow.links.increment_clicks_by_code(
+                        short_code
+                    )
 
-                await self.uow.commit()
+                    await self.uow.commit()
 
-                if self.cache:
-                    await self.cache.invalidate_stats(short_code)
-                    if link.user_id:
+                    if self.cache:
+                        await self.cache.invalidate_stats(short_code)
                         await self.cache.invalidate_user_links(link.user_id)
 
-                logger.info(
-                    f"Click recorded for {short_code}. New count: {new_db_count}"
-                )
+                    logger.info(
+                        f"Click recorded for {short_code}. New count: {new_db_count}"
+                    )
+                else:
+                    logger.debug(f"Skipping stats for anonymous link: {short_code}")
             else:
                 logger.warning(f"Click for non-existent code: {short_code}")
 
@@ -242,6 +245,8 @@ class LinkService:
         limit: int = 50,
         ip: str | None = None,
         country: str | None = None,
+        sort_by: str = "clicked_at",
+        sort_dir: str = "desc",
     ) -> PaginatedClickResponse:
         async with self.uow:
             link = await self._get_link_or_404(short_code)
@@ -249,7 +254,13 @@ class LinkService:
                 raise HTTPException(status_code=403, detail="Not your link")
 
             items, total = await self.uow.clicks.get_by_link_id(
-                link.id, skip=skip, limit=limit, ip=ip, country=country
+                link.id,
+                skip=skip,
+                limit=limit,
+                ip=ip,
+                country=country,
+                sort_by=sort_by,
+                sort_dir=sort_dir,
             )
             return PaginatedClickResponse(items=items, total=total)
 

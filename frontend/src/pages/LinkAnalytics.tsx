@@ -17,7 +17,7 @@ import GlassCard from '../components/GlassCard';
 import LiveIndicator from '../components/LiveIndicator';
 import { useSSESubscription, useSSEStatus } from '../context/SSEContext';
 import { useDebounce } from '../hooks/useDebounce';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import type { LinkStats, ClicksResponse, SSEEvent, Click } from '../types';
 
 const fmtDate = (iso: string) =>
@@ -186,6 +186,19 @@ const ClickRow = ({ click }: { click: Click }) => (
   </tr>
 );
 
+const pageBtnStyle = (isActive: boolean): React.CSSProperties => ({
+  padding: '6px 10px',
+  borderRadius: '6px',
+  border: '1px solid rgba(255,255,255,0.1)',
+  background: isActive ? 'var(--accent-color)' : 'rgba(255,255,255,0.05)',
+  color: isActive ? '#000' : '#fff',
+  cursor: 'pointer',
+  fontSize: '12px',
+  fontWeight: isActive ? '600' : '400',
+  transition: 'all 0.2s',
+  minWidth: '32px'
+});
+
 const LinkAnalytics = () => {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
@@ -211,7 +224,9 @@ const LinkAnalytics = () => {
     queryKey: ['linkStats', code, selectedGranularity],
     queryFn: () => apiClient(selectedGranularity ? `/links/i/${code}/stats?granularity=${selectedGranularity}` : `/links/i/${code}/stats`),
     enabled: !!code,
-    retry: false, // Don't retry on 403/404
+    retry: false,
+    staleTime: 5000,
+    placeholderData: keepPreviousData,
   });
 
   // Clicks Query
@@ -219,25 +234,31 @@ const LinkAnalytics = () => {
   const {
     data: clicksData,
     isLoading: loadingClicks,
+    isFetching: isFetchingClicks,
     isError: isClicksError,
     error: clicksError
   } = useQuery<ClicksResponse>({
-    queryKey: ['linkClicks', code, currentPage, debouncedIp, debouncedCountry],
-    queryFn: () => apiClient(`/links/i/${code}/clicks?limit=${CLICKS_PER_PAGE}&skip=${skip}&ip=${debouncedIp}&country=${debouncedCountry}`),
+    queryKey: ['linkClicks', code, currentPage, debouncedIp, debouncedCountry, sortConfig.key, sortConfig.direction],
+    queryFn: () => apiClient(`/links/i/${code}/clicks?limit=${CLICKS_PER_PAGE}&skip=${skip}&ip=${debouncedIp}&country=${debouncedCountry}&sort_by=${sortConfig.key}&sort_dir=${sortConfig.direction}`),
     enabled: !!code,
     retry: false,
+    staleTime: 5000,
+    placeholderData: keepPreviousData,
   });
 
   const clicks = clicksData?.items || [];
   const totalClicksCount = clicksData?.total || 0;
 
-  // Real-time updates
   const { isConnected, error: sseError } = useSSEStatus();
 
+  // Real-time updates with debounce
   useSSESubscription((data: SSEEvent) => {
     if (data.type === 'link_updated' && data.short_code === code) {
-      queryClient.invalidateQueries({ queryKey: ['linkStats', code] });
-      queryClient.invalidateQueries({ queryKey: ['linkClicks', code] });
+      const timer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['linkStats', code] });
+        queryClient.invalidateQueries({ queryKey: ['linkClicks', code] });
+      }, 1000);
+      return () => clearTimeout(timer);
     }
   });
 
@@ -291,33 +312,16 @@ const LinkAnalytics = () => {
     setSortConfig({ key, direction });
   };
 
-  const sortedClicks = useMemo(() => {
-    let sortableItems = [...clicks];
-    if (sortConfig.key !== null) {
-      sortableItems.sort((a, b) => {
-        let aVal = (a as any)[sortConfig.key] || '';
-        let bVal = (b as any)[sortConfig.key] || '';
-
-        if (sortConfig.key === 'user_agent') {
-          aVal = parseUa(aVal);
-          bVal = parseUa(bVal);
-        }
-
-        if (aVal < bVal) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (aVal > bVal) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
-      });
-    }
-    return sortableItems;
-  }, [clicks, sortConfig]);
-
   const getSortIcon = (key: string) => {
-    if (sortConfig.key !== key) return <ArrowUpDown size={14} style={{ opacity: 0.3 }} />;
-    return sortConfig.direction === 'asc' ? <ChevronUp size={14} color="var(--accent-color)" /> : <ChevronDown size={14} color="var(--accent-color)" />;
+    return (
+      <div style={{ width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {sortConfig.key !== key ? (
+          <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+        ) : (
+          sortConfig.direction === 'asc' ? <ChevronUp size={14} color="var(--accent-color)" /> : <ChevronDown size={14} color="var(--accent-color)" />
+        )}
+      </div>
+    );
   };
 
   // 1. Check for Forbidden first
@@ -713,10 +717,27 @@ const LinkAnalytics = () => {
           </div>
         </div>
 
-        {loadingClicks ? (
-          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>Loading…</div>
+        {loadingClicks && clicks.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)', minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading…</div>
         ) : clicks.length > 0 ? (
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{
+            overflowX: 'auto',
+            opacity: isFetchingClicks ? 0.6 : 1,
+            transition: 'opacity 0.2s',
+            position: 'relative',
+            minHeight: '400px'
+          }}>
+            {isFetchingClicks && (
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '2px',
+                background: 'var(--accent-color)',
+                zIndex: 10,
+              }} className="animate-loading-bar" />
+            )}
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -763,7 +784,7 @@ const LinkAnalytics = () => {
                 </tr>
               </thead>
               <tbody>
-                {sortedClicks.map((click) => (
+                {clicks.map((click) => (
                   <ClickRow key={click.id} click={click} />
                 ))}
               </tbody>
@@ -772,14 +793,14 @@ const LinkAnalytics = () => {
             {(totalClicksCount > CLICKS_PER_PAGE || currentPage > 1) && (
               <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Showing {Math.min(totalClicksCount, (currentPage - 1) * CLICKS_PER_PAGE + 1)}-{Math.min(totalClicksCount, currentPage * CLICKS_PER_PAGE)} of {totalClicksCount}
+                  Total {totalClicksCount} clicks
                 </span>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                   <button
                     disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(p => p - 1)}
+                    onClick={() => setCurrentPage(1)}
                     style={{
-                      padding: '6px 12px',
+                      padding: '6px 10px',
                       borderRadius: '6px',
                       border: '1px solid rgba(255,255,255,0.1)',
                       background: 'rgba(255,255,255,0.05)',
@@ -788,13 +809,55 @@ const LinkAnalytics = () => {
                       fontSize: '12px'
                     }}
                   >
-                    Previous
+                    «
                   </button>
+
+                  {(() => {
+                    const totalPages = Math.ceil(totalClicksCount / CLICKS_PER_PAGE);
+                    const pages = [];
+                    const maxVisible = 5;
+
+                    let start = Math.max(1, currentPage - 2);
+                    let end = Math.min(totalPages, start + maxVisible - 1);
+
+                    if (end - start + 1 < maxVisible) {
+                      start = Math.max(1, end - maxVisible + 1);
+                    }
+
+                    if (start > 1) {
+                      pages.push(
+                        <button key={1} onClick={() => setCurrentPage(1)} style={pageBtnStyle(false)}>1</button>
+                      );
+                      if (start > 2) pages.push(<span key="s-dots" style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>...</span>);
+                    }
+
+                    for (let i = start; i <= end; i++) {
+                      pages.push(
+                        <button
+                          key={i}
+                          onClick={() => setCurrentPage(i)}
+                          style={pageBtnStyle(currentPage === i)}
+                        >
+                          {i}
+                        </button>
+                      );
+                    }
+
+                    if (end < totalPages) {
+                      if (end < totalPages - 1) pages.push(<span key="e-dots" style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>...</span>);
+                      pages.push(
+                        <button key={totalPages} onClick={() => setCurrentPage(totalPages)} style={pageBtnStyle(false)}>{totalPages}</button>
+                      );
+                    }
+
+                    return pages;
+                  })()}
+
                   <button
                     disabled={currentPage * CLICKS_PER_PAGE >= totalClicksCount}
-                    onClick={() => setCurrentPage(p => p + 1)}
+                    onClick={() => setCurrentPage(Math.ceil(totalClicksCount / CLICKS_PER_PAGE))}
                     style={{
-                      padding: '6px 12px',
+                      padding: '6px 10px',
                       borderRadius: '6px',
                       border: '1px solid rgba(255,255,255,0.1)',
                       background: 'rgba(255,255,255,0.05)',
@@ -803,24 +866,44 @@ const LinkAnalytics = () => {
                       fontSize: '12px'
                     }}
                   >
-                    Next
+                    »
                   </button>
                 </div>
               </div>
             )}
           </div>
         ) : (
-          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)', fontSize: '14px', minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             No matching logs found.
           </div>
         )}
       </GlassCard>
 
       <style>{`
+        html { overflow-y: scroll; }
         .hover-row:hover { background: rgba(255,255,255,0.02); }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .recharts-wrapper:focus { outline: none !important; }
-        .recharts-surface:focus { outline: none !important; }
+        .recharts-wrapper:focus,
+        .recharts-surface:focus,
+        .recharts-layer:focus,
+        .recharts-sector:focus,
+        .recharts-curve:focus,
+        .recharts-dot:focus,
+        .recharts-rectangle:focus {
+          outline: none !important;
+        }
+        .recharts-wrapper * {
+          outline: none !important;
+        }
+        @keyframes loading-bar {
+          0% { left: -100%; width: 100%; }
+          100% { left: 100%; width: 100%; }
+        }
+        .animate-loading-bar {
+          position: absolute;
+          animation: loading-bar 1.5s infinite linear;
+          background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
+        }
       `}</style>
     </div>
   );

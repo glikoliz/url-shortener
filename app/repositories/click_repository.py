@@ -19,6 +19,8 @@ class ClickRepository:
         limit: int = 50,
         ip: str | None = None,
         country: str | None = None,
+        sort_by: str = "clicked_at",
+        sort_dir: str = "desc",
     ) -> tuple[list[ClickEvent], int]:
         query = select(ClickEvent).where(ClickEvent.link_id == link_id)
         count_query = (
@@ -46,9 +48,21 @@ class ClickRepository:
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
-        result = await self.db.execute(
-            query.order_by(ClickEvent.clicked_at.desc()).offset(skip).limit(limit)
-        )
+        allowed_sort_columns = {
+            "clicked_at": ClickEvent.clicked_at,
+            "ip_address": ClickEvent.ip_address,
+            "user_agent": ClickEvent.user_agent,
+            "referer": ClickEvent.referer,
+            "country": ClickEvent.country,
+        }
+
+        sort_col = allowed_sort_columns.get(sort_by, ClickEvent.clicked_at)
+        if sort_dir.lower() == "asc":
+            query = query.order_by(sort_col.asc())
+        else:
+            query = query.order_by(sort_col.desc())
+
+        result = await self.db.execute(query.offset(skip).limit(limit))
         items = list(result.scalars().all())
 
         return items, total

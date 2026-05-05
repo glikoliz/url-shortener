@@ -36,19 +36,6 @@ const DashboardLayout = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           {user ? (
             <>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 12px',
-                background: 'rgba(0,0,0,0.2)',
-                borderRadius: '20px',
-                border: '1px solid var(--glass-border)'
-              }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00ff88' }}></div>
-                <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Online</span>
-              </div>
-
               <button
                 onClick={logout}
                 style={{

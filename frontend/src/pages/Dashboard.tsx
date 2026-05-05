@@ -75,12 +75,12 @@ const Dashboard = () => {
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
       {!user ? (
-        <div style={{ textAlign: 'center', padding: '40px 0' }}>
-          <h1 style={{ fontSize: '36px', fontWeight: '800', marginBottom: '16px', background: 'linear-gradient(to right, #fff, #6a00ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Shorten. Track. Analyze.
+        <div style={{ textAlign: 'center', padding: '20px 0 40px' }}>
+          <h1 style={{ fontSize: '32px', fontWeight: '700', marginBottom: '12px' }}>
+            URL Shortener
           </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '18px', maxWidth: '600px', margin: '0 auto 32px' }}>
-            Create powerful short links in seconds. Join for free to track detailed analytics and manage your links.
+          <p style={{ color: 'var(--text-secondary)', fontSize: '16px', maxWidth: '600px', margin: '0 auto 32px' }}>
+            Shorten your links instantly. Authorized users can also track detailed click statistics.
           </p>
 
           <div style={{ marginBottom: '40px' }}>
@@ -104,7 +104,6 @@ const Dashboard = () => {
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h1 style={{ fontSize: '24px', fontWeight: '700', margin: 0 }}>Dashboard</h1>
-            <LiveIndicator isConnected={isConnected} error={sseError} />
           </div>
 
           {/* Top Section: Stats */}
