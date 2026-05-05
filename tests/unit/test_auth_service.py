@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, status
@@ -141,4 +141,49 @@ async def test_get_current_user_deactivated(mock_uow):
             await get_current_user(access_token="valid_token", uow=mock_uow)
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+        assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
         assert exc_info.value.detail == "User account is deactivated"
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_success(auth_service, mock_uow):
+    # Mock the refresh token record
+    mock_token = MagicMock()
+    mock_token.token = "valid_refresh"
+    mock_token.user_id = 1
+    mock_token.revoked = False
+    mock_token.is_expired = False
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_token
+    auth_service.uow.session.execute.return_value = mock_result
+
+    response = await auth_service.refresh_token("valid_refresh")
+
+    assert response.access_token is not None
+    assert response.refresh_token is not None
+    assert mock_token.revoked is True
+    auth_service.uow.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_invalid(auth_service, mock_uow):
+    # Mock no token found
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    auth_service.uow.session.execute.return_value = mock_result
+
+    with pytest.raises(HTTPException) as exc_info:
+        await auth_service.refresh_token("invalid_refresh")
+
+    assert exc_info.value.status_code == 401
+    assert "Invalid or expired" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_none(auth_service):
+    with pytest.raises(HTTPException) as exc_info:
+        await auth_service.refresh_token(None)
+
+    assert exc_info.value.status_code == 401
+    assert "Refresh token missing" in exc_info.value.detail
