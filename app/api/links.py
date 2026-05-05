@@ -21,6 +21,7 @@ redirect_router = APIRouter()
 )
 async def create_link(
     link_data: LinkCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     service: LinkService = Depends(get_link_service),
 ):
@@ -29,6 +30,7 @@ async def create_link(
         user_id=current_user.id,
         custom_code=link_data.custom_code,
         ttl_minutes=link_data.ttl_minutes,
+        background_tasks=background_tasks,
     )
 
 

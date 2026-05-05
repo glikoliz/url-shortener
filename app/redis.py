@@ -1,6 +1,7 @@
 import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import AsyncGenerator
 
 from redis.asyncio import Redis
@@ -45,7 +46,13 @@ async def publish_link_update(user_id: int, data: dict) -> None:
 
     try:
         channel = f"sse:user:{user_id}"
-        await redis_client.publish(channel, json.dumps(data))
+
+        def datetime_handler(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+        await redis_client.publish(channel, json.dumps(data, default=datetime_handler))
     except Exception as e:
         logger.error(
             f"Failed to publish link update for user {user_id}: {e}", exc_info=True

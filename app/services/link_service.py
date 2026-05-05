@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import httpx
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from redis.asyncio import Redis
 from sqlalchemy.exc import IntegrityError
 
@@ -19,6 +19,13 @@ from app.schemas.link import LinkResponse
 from app.services.cache_service import CacheService
 
 logger = logging.getLogger(__name__)
+
+# Shared client pool to avoid handshake overhead
+_http_client = httpx.AsyncClient(
+    timeout=2.0,
+    follow_redirects=True,
+    limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+)
 
 
 class LinkService:
@@ -40,15 +47,14 @@ class LinkService:
         custom_code: str | None = None,
         expires_at: datetime | None = None,
         ttl_minutes: int | None = None,
+        background_tasks: BackgroundTasks | None = None,
     ) -> LinkResponse:
         if ttl_minutes and not expires_at:
             expires_at = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
 
-        final_url = await _resolve_final_url(original_url)
-
-        # Basic protection against shortening our own links
-        if settings.base_url in final_url:
-            if "/s/" in final_url:
+        # Basic protection against shortening our own links (shallow check)
+        if settings.base_url in original_url:
+            if "/s/" in original_url:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="This is already a short link",
@@ -73,7 +79,7 @@ class LinkService:
 
                 link = Link(
                     user_id=user_id,
-                    original_url=final_url,
+                    original_url=original_url,
                     short_code=short_code,
                     expires_at=expires_at,
                 )
@@ -82,7 +88,25 @@ class LinkService:
                     link = await self.uow.links.create(link)
                     await self.uow.commit()
                     await self.uow.session.refresh(link)
-                    await self.cache.invalidate_user_links(user_id)
+
+                    if self.cache:
+                        await self.cache.invalidate_user_links(user_id)
+
+                    # Notify frontend
+                    await publish_link_update(
+                        user_id, {"type": "link_created", "short_code": short_code}
+                    )
+
+                    # Run deep validation in background
+                    if background_tasks:
+                        background_tasks.add_task(
+                            self._validate_link_bg,
+                            link_id=link.id,
+                            original_url=original_url,
+                            user_id=user_id,
+                            short_code=short_code,
+                        )
+
                     return LinkResponse.model_validate(link)
                 except IntegrityError:
                     if custom_code:
@@ -99,9 +123,10 @@ class LinkService:
 
     async def resolve_link(self, short_code: str) -> str:
         # Try cache first
-        cached_url = await self.cache.get_url(short_code)
-        if cached_url:
-            return cached_url
+        if self.cache:
+            cached_url = await self.cache.get_url(short_code)
+            if cached_url:
+                return cached_url
 
         async with self.uow:
             link = await self.uow.links.get_by_code(short_code)
@@ -113,10 +138,10 @@ class LinkService:
 
             self._check_expiration(link)
 
-            # Cache the result
-            await self.cache.set_url(
-                short_code, link.original_url, expires_at=link.expires_at
-            )
+            if self.cache:
+                await self.cache.set_url(
+                    short_code, link.original_url, expires_at=link.expires_at
+                )
             return link.original_url
 
     async def increment_click_redis(self, short_code: str) -> int:
@@ -130,7 +155,6 @@ class LinkService:
 
             key = f"link:{link.id}:clicks"
             await self.redis.set(key, str(link.clicks), ex=86400, nx=True)
-
             new_count = await self.redis.incr(key)
 
             await publish_link_update(
@@ -141,8 +165,11 @@ class LinkService:
                     "clicks": new_count,
                 },
             )
-            await self.cache.invalidate_stats(short_code)
-            await self.cache.invalidate_user_links(link.user_id)
+
+            if self.cache:
+                await self.cache.invalidate_stats(short_code)
+                await self.cache.invalidate_user_links(link.user_id)
+
             return new_count
 
     async def count_click(
@@ -174,9 +201,9 @@ class LinkService:
 
                 await self.uow.commit()
 
-                # Invalidate cache again after DB commit to prevent race conditions
-                await self.cache.invalidate_stats(short_code)
-                await self.cache.invalidate_user_links(link.user_id)
+                if self.cache:
+                    await self.cache.invalidate_stats(short_code)
+                    await self.cache.invalidate_user_links(link.user_id)
 
                 logger.info(
                     f"Click recorded for {short_code}. New count: {new_db_count}"
@@ -222,9 +249,10 @@ class LinkService:
     async def get_click_stats(
         self, short_code: str, user_id: int, granularity: str | None = None
     ) -> ClickStatsResponse:
-        cached_data = await self.cache.get_stats(short_code, granularity)
-        if cached_data:
-            return ClickStatsResponse.model_validate(cached_data)
+        if self.cache:
+            cached_data = await self.cache.get_stats(short_code, granularity)
+            if cached_data:
+                return ClickStatsResponse.model_validate(cached_data)
 
         async with self.uow:
             link = await self._get_link_or_404(short_code)
@@ -243,33 +271,34 @@ class LinkService:
 
             stats["total_clicks"] = total_clicks
             result = ClickStatsResponse.model_validate(stats)
-            await self.cache.set_stats(
-                short_code, granularity, result.model_dump(mode="json")
-            )
+
+            if self.cache:
+                await self.cache.set_stats(
+                    short_code, granularity, result.model_dump(mode="json")
+                )
             return result
 
     async def get_user_links(self, user_id: int) -> list[LinkResponse]:
-        # 1. Try to get link list from cache
-        cached_data = await self.cache.get_user_links(user_id)
-        if cached_data:
-            result = [LinkResponse.model_validate(item) for item in cached_data]
+        if self.cache:
+            cached_data = await self.cache.get_user_links(user_id)
+            if cached_data:
+                result = [LinkResponse.model_validate(item) for item in cached_data]
+            else:
+                async with self.uow:
+                    links = await self.uow.links.get_by_user_id(user_id)
+                    result = [LinkResponse.model_validate(link) for link in links]
+
+                await self.cache.set_user_links(
+                    user_id, [m.model_dump(mode="json") for m in result]
+                )
         else:
-            # 2. If not in cache, get from DB
             async with self.uow:
                 links = await self.uow.links.get_by_user_id(user_id)
                 result = [LinkResponse.model_validate(link) for link in links]
 
-            # 3. Store baseline in cache
-            await self.cache.set_user_links(
-                user_id, [m.model_dump(mode="json") for m in result]
-            )
-
-        # 4. ALWAYS sync with real-time Redis clicks if available.
-        # This ensures counts are accurate even if the link list itself is cached.
         if self.redis and result:
             keys = [f"link:{m.id}:clicks" for m in result]
             redis_counts = await self.redis.mget(keys)
-
             for model, count in zip(result, redis_counts):
                 if count is not None:
                     model.clicks = int(count)
@@ -285,20 +314,18 @@ class LinkService:
             await self.uow.links.delete(link)
             await self.uow.commit()
 
-            await self.cache.delete_url(short_code)
-            await self.cache.invalidate_user_links(user_id)
+            if self.cache:
+                await self.cache.delete_url(short_code)
+                await self.cache.invalidate_user_links(user_id)
+
             await publish_link_update(
                 user_id, {"type": "link_deleted", "short_code": short_code}
             )
 
     async def get_updates_stream(self, user_id: int):
-        """
-        Generator for Server-Sent Events.
-        Listen to Redis pubsub and yield formatted events.
-        """
+        """Generator for Server-Sent Events."""
         async with subscribe_to_user_updates(user_id) as pubsub:
             yield ": ping\n\n"
-
             async for message in pubsub.listen():
                 if message["type"] == "message":
                     yield f"data: {message['data']}\n\n"
@@ -313,6 +340,45 @@ class LinkService:
         if link.expires_at and link.expires_at < datetime.now(timezone.utc):
             raise HTTPException(status_code=410, detail="Short link expired")
 
+    async def _validate_link_bg(
+        self, link_id: int, original_url: str, user_id: int, short_code: str
+    ) -> None:
+        """Background task to resolve redirects and check for recursion."""
+        final_url = await _resolve_final_url(original_url)
+
+        is_recursive = False
+        if settings.base_url in final_url:
+            if "/s/" in final_url or any(
+                p in final_url for p in ["/api/", "/dashboard"]
+            ):
+                is_recursive = True
+
+        if is_recursive:
+            logger.warning(
+                f"Recursive link detected for {link_id} ({short_code}). Deleting."
+            )
+            try:
+                async with self.uow_factory() as uow:
+                    link = await uow.links.get_by_code(short_code)
+                    if link:
+                        await uow.links.delete(link)
+                        await uow.commit()
+
+                    if self.cache:
+                        await self.cache.delete_url(short_code)
+                        await self.cache.invalidate_user_links(user_id)
+
+                    await publish_link_update(
+                        user_id,
+                        {
+                            "type": "link_deleted",
+                            "short_code": short_code,
+                            "reason": "recursive_loop",
+                        },
+                    )
+            except Exception as e:
+                logger.error(f"Failed to delete recursive link {link_id}: {e}")
+
     async def record_click_bg(
         self,
         short_code: str,
@@ -320,19 +386,13 @@ class LinkService:
         user_agent: str | None,
         referer: str | None,
     ) -> None:
-        """
-        Background task wrapper to record a click.
-        Creates its own UnitOfWork to run outside of request scope.
-        """
+        """Background task wrapper to record a click."""
         try:
             async with self.uow_factory() as uow:
-                service = LinkService(uow, self.redis)
+                service = LinkService(uow, self.redis, self.uow_factory)
                 await service.count_click(short_code, ip, user_agent, referer)
         except Exception as e:
-            logger.error(
-                f"Background click recording failed for {short_code}: {e}",
-                exc_info=True,
-            )
+            logger.error(f"Background click recording failed for {short_code}: {e}")
 
 
 async def _resolve_final_url(url: str) -> str:
@@ -340,10 +400,10 @@ async def _resolve_final_url(url: str) -> str:
         url = "https://" + url
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.head(url, follow_redirects=True)
-            return str(response.url)
-    except Exception:
+        response = await _http_client.head(url)
+        return str(response.url)
+    except Exception as e:
+        logger.debug(f"URL resolution failed for {url}: {e}")
         return url
 
 
