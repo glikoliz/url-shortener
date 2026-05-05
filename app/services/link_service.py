@@ -290,6 +290,31 @@ class LinkService:
         if link.expires_at and link.expires_at < datetime.now(timezone.utc):
             raise HTTPException(status_code=410, detail="Short link expired")
 
+    async def record_click_bg(
+        self,
+        short_code: str,
+        ip: str | None,
+        user_agent: str | None,
+        referer: str | None,
+    ) -> None:
+        """
+        Background task wrapper to record a click.
+        Creates its own UnitOfWork to run outside of request scope.
+        """
+        try:
+            from app.core.uow import SqlAlchemyUnitOfWork
+
+            async with SqlAlchemyUnitOfWork() as uow:
+                service = LinkService(uow, self.redis)
+                await service.count_click(short_code, ip, user_agent, referer)
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).error(
+                f"Background click recording failed for {short_code}: {e}",
+                exc_info=True,
+            )
+
 
 async def _resolve_final_url(url: str) -> str:
     if not url.startswith(("http://", "https://")):
