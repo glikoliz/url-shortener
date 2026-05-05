@@ -2,8 +2,9 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 
+from app.config import settings
 from app.schemas.click import ClickStatsResponse
 
 
@@ -267,20 +268,30 @@ async def test_delete_link_invalidates_cache(link_service, mock_link, mock_redis
 
 
 @pytest.mark.asyncio
-async def test_shorten_url_indirect_self_reference(link_service, mock_resolve_url):
-    from app.config import settings
+async def test_shorten_url_indirect_self_reference(
+    link_service, mock_resolve_url, mock_link
+):
+    created_link = mock_link(id=123, short_code="xyz123")
+    link_service.link_repo.get_by_code.return_value = None
+    link_service.link_repo.create.return_value = created_link
 
     mock_resolve_url.side_effect = None
     mock_resolve_url.return_value = f"{settings.base_url}/s/xyz"
+    bg_tasks = BackgroundTasks()
 
-    with pytest.raises(HTTPException) as exc_info:
-        await link_service.shorten_url(
-            original_url="https://evil-proxy.com/redirect",
-            user_id=1,
-        )
+    res = await link_service.shorten_url(
+        user_id=1,
+        original_url="https://evil-proxy.com/redirect",
+        background_tasks=bg_tasks,
+    )
+    assert res.short_code == "xyz123"
 
-    assert exc_info.value.status_code == 400
-    assert "already a short link" in str(exc_info.value.detail)
+    link_service.link_repo.get_by_code.return_value = created_link
+
+    await link_service._validate_link_bg(
+        123, "https://evil-proxy.com/redirect", 1, "xyz123"
+    )
+    link_service.link_repo.delete.assert_awaited_once()
 
 
 @pytest.mark.asyncio
