@@ -2,16 +2,17 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
+from redis.asyncio import Redis
 
 from app import database
 from app.api.dependencies import (
     get_current_user,
     get_link_service,
+    get_redis,
     get_user_id_from_token,
 )
 from app.limiter import RateLimiter, user_aware_identifier
 from app.models.user import User
-from app.redis import redis_client
 from app.schemas.click import ClickStatsResponse, PaginatedClickResponse
 from app.schemas.link import LinkCreate, LinkResponse
 from app.services.link_service import LinkService
@@ -21,11 +22,15 @@ redirect_router = APIRouter()
 
 
 async def _background_record_click(
-    short_code: str, ip: str | None, user_agent: str | None, referer: str | None
+    short_code: str,
+    ip: str | None,
+    user_agent: str | None,
+    referer: str | None,
+    redis: Redis,
 ):
     try:
         async with database.db_session() as db:
-            service = LinkService(db, redis=redis_client)
+            service = LinkService(db, redis=redis)
             await service.count_click(short_code, ip, user_agent, referer)
     except Exception as e:
         logging.getLogger(__name__).error(
@@ -137,6 +142,7 @@ async def redirect_to_original(
     request: Request,
     background_tasks: BackgroundTasks,
     service: LinkService = Depends(get_link_service),
+    redis: Redis = Depends(get_redis),
 ):
     original_url = await service.resolve_link(short_code)
 
@@ -152,6 +158,7 @@ async def redirect_to_original(
         ip=ip,
         user_agent=user_agent,
         referer=referer,
+        redis=redis,
     )
 
     return RedirectResponse(url=original_url, status_code=302)
