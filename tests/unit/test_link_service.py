@@ -295,3 +295,248 @@ async def test_shorten_url_self_redirect(link_service):
 
     assert exc_info.value.status_code == 400
     assert "already a short link" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_get_link_info_sync(link_service, mock_link, mock_redis):
+    link = mock_link(id=1, user_id=1, short_code="abc", clicks=5)
+    link_service.link_repo.get_by_code.return_value = link
+    mock_redis.get.return_value = "10"
+
+    result = await link_service.get_link_info("abc", user_id=1)
+
+    assert result.clicks == 10
+    mock_redis.get.assert_awaited_once_with("link:1:clicks")
+
+
+@pytest.mark.asyncio
+async def test_get_user_links_hybrid_cache(link_service, mock_link, mock_redis):
+    now = datetime.now(timezone.utc)
+    cached_links = [
+        {
+            "id": 1,
+            "short_code": "abc",
+            "clicks": 5,
+            "original_url": "http://a.com",
+            "user_id": 1,
+            "created_at": now.isoformat(),
+        }
+    ]
+
+    with patch.object(link_service.cache, "get_user_links", return_value=cached_links):
+        mock_redis.mget.return_value = ["10"]
+
+        result = await link_service.get_user_links(user_id=1)
+
+        assert len(result) == 1
+        assert result[0].clicks == 10
+        mock_redis.mget.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_updates_stream(link_service):
+    user_id = 1
+    mock_pubsub = AsyncMock()
+    messages = [{"type": "message", "data": '{"test": "data"}'}]
+
+    async def mock_listen():
+        for m in messages:
+            yield m
+
+    mock_pubsub.listen = mock_listen
+
+    with patch("app.services.link_service.subscribe_to_user_updates") as mock_sub:
+        mock_sub.return_value.__aenter__.return_value = mock_pubsub
+
+        stream = link_service.get_updates_stream(user_id)
+        events = []
+        async for event in stream:
+            events.append(event)
+
+        assert ": ping\n\n" in events
+        assert 'data: {"test": "data"}\n\n' in events
+
+
+@pytest.mark.asyncio
+async def test_get_user_links_cache_miss(link_service, mock_link, mock_redis):
+    with patch.object(link_service.cache, "get_user_links", return_value=None):
+        link_service.link_repo.get_by_user_id.return_value = [
+            mock_link(id=1, short_code="abc")
+        ]
+        mock_redis.mget.return_value = ["10"]
+
+        result = await link_service.get_user_links(user_id=1)
+
+        assert len(result) == 1
+        assert result[0].clicks == 10
+        link_service.link_repo.get_by_user_id.assert_awaited_once_with(1)
+
+
+@pytest.mark.asyncio
+async def test_resolve_link_not_found_helper(link_service):
+    link_service.link_repo.get_by_code.return_value = None
+    with pytest.raises(HTTPException) as exc:
+        await link_service.resolve_link("missing")
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_link_expired_helper(link_service, mock_link):
+    expired = datetime.now(timezone.utc) - timedelta(days=1)
+    link = mock_link(expires_at=expired)
+    link_service.link_repo.get_by_code.return_value = link
+
+    with pytest.raises(HTTPException) as exc:
+        await link_service.resolve_link("expired")
+    assert exc.value.status_code == 410
+
+
+@pytest.mark.asyncio
+async def test_record_click_bg_error(link_service):
+    with patch(
+        "app.services.link_service.LinkService.count_click",
+        side_effect=Exception("DB Error"),
+    ):
+        with patch("app.services.link_service.logger.error") as mock_log:
+            await link_service.record_click_bg("abc", "1.1.1.1", "UA", "ref")
+            mock_log.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_get_link_info_not_found(link_service):
+    link_service.link_repo.get_by_code.return_value = None
+    with pytest.raises(HTTPException) as exc:
+        await link_service.get_link_info("nonexistent", 1)
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_record_click_bg(link_service, mock_redis):
+    with patch("app.services.link_service.LinkService.count_click") as mock_count:
+        await link_service.record_click_bg("abc", "1.2.3.4", "UA", "ref")
+        mock_count.assert_awaited_once_with("abc", "1.2.3.4", "UA", "ref")
+
+
+@pytest.mark.asyncio
+async def test_count_click_unique_check(link_service, mock_link, mock_redis):
+    link = mock_link(id=1, short_code="abc")
+    link_service.link_repo.get_by_code.return_value = link
+    mock_redis.set.return_value = False  # Not unique
+
+    await link_service.count_click("abc", "1.2.3.4", None, None)
+
+    args, kwargs = link_service.click_repo.create.call_args
+    event = args[0]
+    assert event.is_unique is False
+
+
+@pytest.mark.asyncio
+async def test_shorten_url_with_ttl_minutes(link_service, mock_link):
+    link_service.link_repo.get_by_code.return_value = None
+    link_service.link_repo.create.return_value = mock_link()
+
+    await link_service.shorten_url("http://example.com", 1, ttl_minutes=60)
+    args, kwargs = link_service.link_repo.create.call_args
+    link = args[0]
+    assert link.expires_at is not None
+    diff = link.expires_at - datetime.now(timezone.utc)
+    assert 3500 < diff.total_seconds() < 3700
+
+
+@pytest.mark.asyncio
+async def test_shorten_url_already_our_service(link_service):
+    from app.config import settings
+
+    with pytest.raises(HTTPException) as exc:
+        await link_service.shorten_url(f"{settings.base_url}/dashboard", 1)
+    assert exc.value.status_code == 400
+    assert "Original URL is already pointing" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_shorten_url_integrity_error_retry(link_service, mock_link):
+    from sqlalchemy.exc import IntegrityError
+
+    link_service.link_repo.get_by_code.return_value = None
+    link_service.link_repo.create.side_effect = [
+        IntegrityError(None, None, None),
+        mock_link(),
+    ]
+
+    await link_service.shorten_url("http://example.com", 1)
+    assert link_service.link_repo.create.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_get_click_stats_cache_hit(link_service):
+    stats = {
+        "total_clicks": 100,
+        "unique_clicks": 50,
+        "unique_ips": 30,
+        "granularity": "all",
+        "clicks_over_time": [],
+        "clicks_by_day": [],
+        "top_referers": [],
+        "top_countries": [],
+    }
+    with patch.object(link_service.cache, "get_stats", return_value=stats):
+        result = await link_service.get_click_stats("abc", 1)
+        assert result.total_clicks == 100
+        link_service.link_repo.get_by_code.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_increment_click_redis_no_redis(link_service):
+    link_service.redis = None
+    result = await link_service.increment_click_redis("abc")
+    assert result == 0
+
+
+@pytest.mark.asyncio
+async def test_increment_click_redis_not_found(link_service):
+    link_service.link_repo.get_by_code.return_value = None
+    result = await link_service.increment_click_redis("nonexistent")
+    assert result == 0
+
+
+@pytest.mark.asyncio
+async def test_count_click_not_found_log(link_service):
+    link_service.link_repo.get_by_code.return_value = None
+    with patch("app.services.link_service.logger.warning") as mock_log:
+        await link_service.count_click("nonexistent", None, None, None)
+        mock_log.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_shorten_url_custom_code_integrity_error(link_service):
+    from sqlalchemy.exc import IntegrityError
+
+    link_service.link_repo.get_by_code.return_value = None
+    link_service.link_repo.create.side_effect = IntegrityError(None, None, None)
+
+    with pytest.raises(HTTPException) as exc:
+        await link_service.shorten_url("http://ex.com", 1, custom_code="taken")
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_shorten_url_max_retries_reached(link_service):
+    from sqlalchemy.exc import IntegrityError
+
+    link_service.link_repo.get_by_code.return_value = None
+    link_service.link_repo.create.side_effect = IntegrityError(None, None, None)
+
+    link_service.link_repo.create.side_effect = [IntegrityError(None, None, None)] * 5
+
+    with pytest.raises(HTTPException) as exc:
+        await link_service.shorten_url("http://ex.com", 1)
+    assert exc.value.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_get_link_info_not_owner(link_service, mock_link):
+    link = mock_link(user_id=1)
+    link_service.link_repo.get_by_code.return_value = link
+    with pytest.raises(HTTPException) as exc:
+        await link_service.get_link_info("abc", user_id=99)
+    assert exc.value.status_code == 403

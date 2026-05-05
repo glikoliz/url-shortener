@@ -71,10 +71,12 @@ async def test_subscribe_to_user_updates():
         await init_redis()
 
         user_id = 10
-        ps = await subscribe_to_user_updates(user_id)
+        async with subscribe_to_user_updates(user_id) as ps:
+            assert ps == mock_pubsub
+            mock_pubsub.subscribe.assert_awaited_once_with(f"sse:user:{user_id}")
 
-        assert ps == mock_pubsub
-        mock_pubsub.subscribe.assert_awaited_once_with(f"sse:user:{user_id}")
+        mock_pubsub.unsubscribe.assert_awaited_once()
+        mock_pubsub.close.assert_awaited_once()
 
         await close_redis()
 
@@ -83,4 +85,5 @@ async def test_subscribe_to_user_updates():
 async def test_subscribe_not_initialized():
     await close_redis()
     with pytest.raises(RuntimeError, match="Redis is not initialized"):
-        await subscribe_to_user_updates(1)
+        async with subscribe_to_user_updates(1):
+            pass
