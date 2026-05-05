@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -70,38 +72,37 @@ class ClickRepository:
     async def get_aggregated_stats(
         self, link_id: int, granularity: str | None = None
     ) -> dict:
-        if not granularity:
-            range_query = select(
-                func.min(ClickEvent.clicked_at).label("min_t"),
-                func.max(ClickEvent.clicked_at).label("max_t"),
-            ).where(ClickEvent.link_id == link_id)
+        now = datetime.now(timezone.utc)
 
-            range_result = await self.db.execute(range_query)
-            r = range_result.one()
-            min_t, max_t = r.min_t, r.max_t
-
-            granularity = "day"
-            if min_t and max_t:
-                diff = max_t - min_t
-                if diff.total_seconds() < 7200:  # < 2 hours -> minutes
-                    granularity = "minute"
-                elif diff.total_seconds() < 172800:  # < 48 hours -> hours
-                    granularity = "hour"
-
+        # Define time window and granularity
         if granularity == "minute":
+            since = now - timedelta(hours=1)
             group_func = func.date_trunc("minute", ClickEvent.clicked_at)
+            time_delta = timedelta(minutes=1)
+            num_points = 60
+            format_str = "%Y-%m-%dT%H:%M:00Z"
         elif granularity == "hour":
+            since = now - timedelta(hours=23)  # last 24 hours
+            since = since.replace(minute=0, second=0, microsecond=0)
             group_func = func.date_trunc("hour", ClickEvent.clicked_at)
+            time_delta = timedelta(hours=1)
+            num_points = 24
+            format_str = "%Y-%m-%dT%H:00:00Z"
         else:
             granularity = "day"
+            since = now - timedelta(days=29)  # last 30 days
+            since = since.replace(hour=0, minute=0, second=0, microsecond=0)
             group_func = func.date(ClickEvent.clicked_at)
+            time_delta = timedelta(days=1)
+            num_points = 30
+            format_str = "%Y-%m-%d"
 
         clicks_query = (
             select(
                 group_func.label("period"),
                 func.count().label("clicks"),
             )
-            .where(ClickEvent.link_id == link_id)
+            .where(ClickEvent.link_id == link_id, ClickEvent.clicked_at >= since)
             .group_by("period")
             .order_by("period")
         )
@@ -122,10 +123,9 @@ class ClickRepository:
             .limit(20)
         )
 
-        # Total clicks, Unique clicks summary, and Distinct IPs
+        # Total clicks and Distinct IPs (always global)
         summary_query = select(
             func.count().label("total"),
-            func.count().filter(ClickEvent.is_unique.is_(True)).label("unique"),
             func.count(func.distinct(ClickEvent.ip_address)).label("unique_ips"),
         ).where(ClickEvent.link_id == link_id)
 
@@ -136,13 +136,31 @@ class ClickRepository:
         referers_result = await self.db.execute(referers_query)
         countries_result = await self.db.execute(countries_query)
 
-        clicks_over_time = [
-            {"date": r.period, "clicks": r.clicks} for r in clicks_result.all()
-        ]
+        # Process clicks with gap filling
+        def get_key(dt, gran):
+            if gran == "day":
+                return (dt.year, dt.month, dt.day)
+            if gran == "hour":
+                return (dt.year, dt.month, dt.day, dt.hour)
+            if gran == "minute":
+                return (dt.year, dt.month, dt.day, dt.hour, dt.minute)
+            return dt
+
+        raw_clicks = {
+            get_key(r.period, granularity): r.clicks for r in clicks_result.all()
+        }
+        clicks_over_time = []
+
+        current = since
+        for _ in range(num_points):
+            key = get_key(current, granularity)
+            clicks_over_time.append(
+                {"date": current.strftime(format_str), "clicks": raw_clicks.get(key, 0)}
+            )
+            current += time_delta
 
         return {
             "total_clicks": summary.total,
-            "unique_clicks": summary.unique,
             "unique_ips": summary.unique_ips,
             "clicks_over_time": clicks_over_time,
             "clicks_by_day": clicks_over_time,

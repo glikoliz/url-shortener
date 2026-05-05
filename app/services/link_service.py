@@ -49,7 +49,11 @@ class LinkService:
         ttl_minutes: int | None = None,
         background_tasks: BackgroundTasks | None = None,
     ) -> LinkResponse:
-        if ttl_minutes and not expires_at:
+        if not user_id:
+            # Anonymous users: no custom code, exactly 7 days TTL
+            custom_code = None
+            expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        elif ttl_minutes and not expires_at:
             expires_at = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
 
         # Basic protection against shortening our own links (shallow check)
@@ -185,21 +189,14 @@ class LinkService:
         async with self.uow:
             link = await self.uow.links.get_by_code(short_code)
             if link:
-                is_unique = True
-                if ip and self.redis:
-                    unique_key = f"unique:link:{link.id}:ip:{ip}"
-                    was_set = await self.redis.set(unique_key, "1", ex=86400, nx=True)
-                    if not was_set:
-                        is_unique = False
-
-                # Only record and count clicks if the link has an owner
+                # Record the click
                 if link.user_id:
                     event = ClickEvent(
                         link_id=link.id,
                         ip_address=ip[:45] if ip else None,
                         user_agent=user_agent[:512] if user_agent else None,
                         referer=referer[:2048] if referer else None,
-                        is_unique=is_unique,
+                        is_unique=True,
                     )
                     await self.uow.clicks.create(event)
 
@@ -267,8 +264,13 @@ class LinkService:
     async def get_click_stats(
         self, short_code: str, user_id: int, granularity: str | None = None
     ) -> ClickStatsResponse:
+        # Force a refresh for hourly stats by changing the cache key slightly
+        cache_granularity = granularity
+        if granularity == "hour":
+            cache_granularity = "hour_v2"
+
         if self.cache:
-            cached_data = await self.cache.get_stats(short_code, granularity)
+            cached_data = await self.cache.get_stats(short_code, cache_granularity)
             if cached_data:
                 return ClickStatsResponse.model_validate(cached_data)
 

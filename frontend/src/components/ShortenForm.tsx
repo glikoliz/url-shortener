@@ -175,22 +175,30 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
             borderRadius: '8px',
             border: '1px dashed var(--glass-border)'
           }}>
+            {!user && (
+              <div style={{ gridColumn: '1 / -1', marginBottom: '8px', padding: '8px', background: 'rgba(255, 215, 0, 0.1)', border: '1px solid rgba(255, 215, 0, 0.3)', borderRadius: '6px', fontSize: '12px', color: '#ffd700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={14} />
+                Sign in to use custom aliases and longer expiration. Anonymous links expire in 7 days.
+              </div>
+            )}
             <div>
               <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Custom Alias (optional)</label>
               <input
                 type="text"
-                placeholder="e.g. my-campaign"
+                placeholder={user ? "e.g. my-campaign" : "Pro feature"}
                 value={customCode}
                 onChange={e => setCustomCode(e.target.value)}
                 maxLength={20}
+                disabled={!user}
                 style={{
                   width: '100%',
                   padding: '10px 12px',
-                  background: 'rgba(0,0,0,0.2)',
+                  background: user ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.4)',
                   border: '1px solid var(--glass-border)',
                   borderRadius: '6px',
-                  color: 'white',
-                  fontSize: '14px'
+                  color: user ? 'white' : 'rgba(255,255,255,0.3)',
+                  fontSize: '14px',
+                  cursor: user ? 'text' : 'not-allowed'
                 }}
               />
             </div>
@@ -200,16 +208,18 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
                 type="number"
                 min="1"
                 max="365"
-                value={ttlDays}
+                value={user ? ttlDays : 7}
                 onChange={e => setTtlDays(e.target.value)}
+                disabled={!user}
                 style={{
                   width: '100%',
                   padding: '10px 12px',
-                  background: 'rgba(0,0,0,0.2)',
+                  background: user ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.4)',
                   border: '1px solid var(--glass-border)',
                   borderRadius: '6px',
-                  color: 'white',
-                  fontSize: '14px'
+                  color: user ? 'white' : 'rgba(255,255,255,0.3)',
+                  fontSize: '14px',
+                  cursor: user ? 'text' : 'not-allowed'
                 }}
               />
             </div>
@@ -239,37 +249,40 @@ const ShortenForm = ({ onShortened }: ShortenFormProps) => {
       {result && !bgError && (
         <div className="animate-fade-in" style={{
           marginTop: '24px',
-          padding: '20px',
-          background: 'rgba(0, 212, 255, 0.1)',
-          border: '1px solid rgba(0, 212, 255, 0.3)',
-          borderRadius: '12px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
+          padding: '16px 20px',
+          background: 'rgba(0, 212, 255, 0.08)',
+          border: '1px solid rgba(0, 212, 255, 0.2)',
+          borderRadius: '16px'
         }}>
-          <div>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Your short URL is ready:</p>
-            <a href={result.short_url} target="_blank" rel="noreferrer" style={{ fontSize: '18px', fontWeight: '600', color: '#00d4ff' }}>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Sparkles size={14} color="#00d4ff" />
+            Your short URL is ready:
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+            <a href={result.short_url} target="_blank" rel="noreferrer" style={{ fontSize: '18px', fontWeight: '600', color: '#00d4ff', wordBreak: 'break-all' }}>
               {result.short_url}
             </a>
+            <button
+              onClick={handleCopy}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                background: copied ? '#00ff88' : 'rgba(0, 212, 255, 0.15)',
+                color: copied ? '#000' : 'white',
+                borderRadius: '8px',
+                fontWeight: '600',
+                fontSize: '14px',
+                transition: 'all 0.2s',
+                border: '1px solid rgba(0, 212, 255, 0.2)',
+                flexShrink: 0
+              }}
+            >
+              {copied ? <Check size={16} /> : <Copy size={16} />}
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
           </div>
-          <button
-            onClick={handleCopy}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 16px',
-              background: copied ? '#00ff88' : 'rgba(0, 212, 255, 0.2)',
-              color: copied ? '#000' : 'white',
-              borderRadius: '8px',
-              fontWeight: '500',
-              transition: 'all 0.2s'
-            }}
-          >
-            {copied ? <Check size={18} /> : <Copy size={18} />}
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
         </div>
       )}
     </GlassCard>

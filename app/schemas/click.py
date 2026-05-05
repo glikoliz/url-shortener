@@ -16,7 +16,6 @@ class ClickEventResponse(BaseModel):
 
 class ClickStatsResponse(BaseModel):
     total_clicks: int
-    unique_clicks: int
     unique_ips: int
     granularity: str | None
     clicks_over_time: list[dict]

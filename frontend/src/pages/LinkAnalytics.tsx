@@ -480,7 +480,6 @@ const LinkAnalytics = () => {
           }}
         >
           <StatCard icon={MousePointerClick} label="Total Clicks" value={stats.total_clicks} color="var(--accent-color)" />
-          <StatCard icon={MousePointerClick} label="Unique Clicks" value={stats.unique_clicks} color="#fbbf24" />
           <StatCard icon={Globe} label="Unique IPs" value={totalUniqueClicks} color="#60a5fa" />
           <StatCard
             icon={() => <span style={{ fontSize: '20px' }}>{getFlagEmoji(topCountry)}</span>}
