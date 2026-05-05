@@ -22,7 +22,7 @@ class LinkCreate(BaseModel):
 
 class LinkResponse(BaseModel):
     id: int
-    user_id: int
+    user_id: int | None
     original_url: str
     short_code: str
     clicks: int

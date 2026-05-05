@@ -43,7 +43,7 @@ class LinkService:
     async def shorten_url(
         self,
         original_url: str,
-        user_id: int,
+        user_id: int | None,
         custom_code: str | None = None,
         expires_at: datetime | None = None,
         ttl_minutes: int | None = None,
@@ -89,13 +89,14 @@ class LinkService:
                     await self.uow.commit()
                     await self.uow.session.refresh(link)
 
-                    if self.cache:
+                    if self.cache and user_id:
                         await self.cache.invalidate_user_links(user_id)
 
                     # Notify frontend
-                    await publish_link_update(
-                        user_id, {"type": "link_created", "short_code": short_code}
-                    )
+                    if user_id:
+                        await publish_link_update(
+                            user_id, {"type": "link_created", "short_code": short_code}
+                        )
 
                     # Run deep validation in background
                     if background_tasks:
@@ -157,18 +158,20 @@ class LinkService:
             await self.redis.set(key, str(link.clicks), ex=86400, nx=True)
             new_count = await self.redis.incr(key)
 
-            await publish_link_update(
-                link.user_id,
-                {
-                    "type": "link_updated",
-                    "short_code": short_code,
-                    "clicks": new_count,
-                },
-            )
+            if link.user_id:
+                await publish_link_update(
+                    link.user_id,
+                    {
+                        "type": "link_updated",
+                        "short_code": short_code,
+                        "clicks": new_count,
+                    },
+                )
 
             if self.cache:
                 await self.cache.invalidate_stats(short_code)
-                await self.cache.invalidate_user_links(link.user_id)
+                if link.user_id:
+                    await self.cache.invalidate_user_links(link.user_id)
 
             return new_count
 
@@ -189,21 +192,25 @@ class LinkService:
                     if not was_set:
                         is_unique = False
 
-                event = ClickEvent(
-                    link_id=link.id,
-                    ip_address=ip[:45] if ip else None,
-                    user_agent=user_agent[:512] if user_agent else None,
-                    referer=referer[:2048] if referer else None,
-                    is_unique=is_unique,
-                )
-                await self.uow.clicks.create(event)
+                # Only record detailed click events if the link has an owner
+                if link.user_id:
+                    event = ClickEvent(
+                        link_id=link.id,
+                        ip_address=ip[:45] if ip else None,
+                        user_agent=user_agent[:512] if user_agent else None,
+                        referer=referer[:2048] if referer else None,
+                        is_unique=is_unique,
+                    )
+                    await self.uow.clicks.create(event)
+
                 new_db_count = await self.uow.links.increment_clicks_by_code(short_code)
 
                 await self.uow.commit()
 
                 if self.cache:
                     await self.cache.invalidate_stats(short_code)
-                    await self.cache.invalidate_user_links(link.user_id)
+                    if link.user_id:
+                        await self.cache.invalidate_user_links(link.user_id)
 
                 logger.info(
                     f"Click recorded for {short_code}. New count: {new_db_count}"
