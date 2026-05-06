@@ -9,7 +9,7 @@
             "destination": "http://195.208.118.34:8000/s/:path*"
         },
         {
-            "source": "/((?!api|s|index.html|assets|favicon.ico).* )",
+            "source": "/:path*",
             "destination": "/index.html"
         }
     ]
