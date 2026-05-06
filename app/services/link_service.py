@@ -1,8 +1,11 @@
+import ipaddress
 import logging
 import secrets
+import socket
 import string
 from datetime import datetime, timedelta, timezone
 from typing import Callable
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import BackgroundTasks, HTTPException, status
@@ -224,7 +227,8 @@ class LinkService:
     async def get_link_info(self, short_code: str, user_id: int) -> LinkResponse:
         async with self.uow:
             link = await self._get_link_or_404(short_code)
-            if link.user_id != user_id and not link.is_public_stats:
+            is_owner = user_id is not None and link.user_id == user_id
+            if not is_owner and not link.is_public_stats:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Not your link"
                 )
@@ -250,7 +254,8 @@ class LinkService:
     ) -> PaginatedClickResponse:
         async with self.uow:
             link = await self._get_link_or_404(short_code)
-            if link.user_id != user_id and not link.is_public_stats:
+            is_owner = user_id is not None and link.user_id == user_id
+            if not is_owner and not link.is_public_stats:
                 raise HTTPException(status_code=403, detail="Not your link")
 
             items, total = await self.uow.clicks.get_by_link_id(
@@ -279,7 +284,8 @@ class LinkService:
 
         async with self.uow:
             link = await self._get_link_or_404(short_code)
-            if link.user_id != user_id and not link.is_public_stats:
+            is_owner = user_id is not None and link.user_id == user_id
+            if not is_owner and not link.is_public_stats:
                 raise HTTPException(status_code=403, detail="Not your link")
 
             stats = await self.uow.clicks.get_aggregated_stats(
@@ -365,9 +371,8 @@ class LinkService:
             raise HTTPException(status_code=410, detail="Short link expired")
 
     async def _validate_link_bg(
-        self, link_id: int, original_url: str, user_id: int, short_code: str
+        self, link_id: int, original_url: str, user_id: int | None, short_code: str
     ) -> None:
-        """Background task to resolve redirects and check for recursion."""
         final_url = await _resolve_final_url(original_url)
 
         is_recursive = False
@@ -379,19 +384,24 @@ class LinkService:
 
         if is_recursive:
             logger.warning(
-                f"Recursive link detected for {link_id} ({short_code}). Deleting."
+                f"Recursive or unsafe link detected for {link_id} ({short_code}). "
+                f"Target: {final_url}. Deleting."
             )
             try:
                 async with self.uow_factory() as uow:
                     link = await uow.links.get_by_code(short_code)
-                    if link:
-                        await uow.links.delete(link)
-                        await uow.commit()
+                    if not link:
+                        return
 
-                    if self.cache:
-                        await self.cache.delete_url(short_code)
+                    await uow.links.delete(link)
+                    await uow.commit()
+
+                if self.cache:
+                    await self.cache.delete_url(short_code)
+                    if user_id:
                         await self.cache.invalidate_user_links(user_id)
 
+                if user_id:
                     await publish_link_update(
                         user_id,
                         {
@@ -423,12 +433,53 @@ async def _resolve_final_url(url: str) -> str:
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
 
+    if not _is_safe_url(url):
+        logger.warning(f"SSRF Protection: Blocked request to unsafe URL: {url}")
+        return url
+
     try:
-        response = await _http_client.head(url)
-        return str(response.url)
+        response = await _http_client.head(url, follow_redirects=True)
+        final_url = str(response.url)
+
+        if not _is_safe_url(final_url):
+            logger.warning(
+                f"SSRF Protection: Blocked redirect to unsafe URL: {final_url}"
+            )
+            return url
+
+        return final_url
     except Exception as e:
         logger.debug(f"URL resolution failed for {url}: {e}")
         return url
+
+
+def _is_safe_url(url: str) -> bool:
+    """Check if the URL points to a safe (non-internal) IP address."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+
+        addr_infos = socket.getaddrinfo(hostname, None)
+        for info in addr_infos:
+            ip_str = info[4][0]
+            ip = ipaddress.ip_address(ip_str)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_multicast
+                or ip.is_reserved
+                or ip.is_unspecified
+            ):
+                return False
+        return True
+    except Exception:
+        return False
 
 
 def _generate_short_code(length: int = 6) -> str:
