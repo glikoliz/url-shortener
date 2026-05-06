@@ -28,6 +28,10 @@ _http_client = httpx.AsyncClient(
 )
 
 
+async def close_http_client():
+    await _http_client.aclose()
+
+
 class LinkService:
     def __init__(
         self,

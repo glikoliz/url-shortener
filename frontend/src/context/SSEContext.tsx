@@ -39,7 +39,6 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       eventSource.onopen = () => {
         setIsConnected(true);
         setError(false);
-        console.log('SSE Provider Connected');
       };
 
       eventSource.onmessage = (event) => {
@@ -47,7 +46,6 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const data = JSON.parse(event.data);
           listeners.current.forEach(listener => listener(data));
         } catch (err) {
-          console.error('SSE Parse Error:', err);
         }
       };
 
@@ -61,7 +59,6 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             reconnectTimeout = setTimeout(connect, 3000);
           }
         } catch (err) {
-          console.log('SSE Provider stop retry: session invalid');
           setError(true);
         }
       };
@@ -114,7 +111,6 @@ export const OptimizedSSEProvider: React.FC<{ children: React.ReactNode }> = ({ 
       eventSource.onopen = () => {
         setIsConnected(true);
         setError(false);
-        console.log('Global SSE Connected');
       };
 
       eventSource.onmessage = (event) => {
@@ -122,7 +118,7 @@ export const OptimizedSSEProvider: React.FC<{ children: React.ReactNode }> = ({ 
           const data = JSON.parse(event.data);
           listeners.current.forEach(l => l(data));
         } catch (err) {
-          console.error('SSE Parse Error:', err);
+          // Parse error: skipping message
         }
       };
 

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     ]
     cookie_secure: bool = True
     log_level: str = "INFO"
+    max_request_size: int = 10 * 1024  # 10 KB
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

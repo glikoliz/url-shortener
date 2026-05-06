@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -10,12 +11,14 @@ from app.api import auth, links
 from app.config import settings
 from app.core.exceptions import setup_exception_handlers
 from app.core.logging import setup_logging
-from app.core.middleware import RequestLoggingMiddleware
+from app.core.middleware import ContentLengthLimitMiddleware, RequestLoggingMiddleware
 from app.database import engine, get_db
 from app.limiter import limiter_manager
 from app.redis import close_redis, get_redis, init_redis
+from app.services.link_service import close_http_client
 
 setup_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -27,6 +30,7 @@ async def lifespan(app: FastAPI):
     await limiter_manager.init_limiter("links:redirect", redis, requests=30, seconds=60)
     yield
     await close_redis()
+    await close_http_client()
     await engine.dispose()
 
 
@@ -42,6 +46,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(ContentLengthLimitMiddleware)
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(links.router, prefix="/api/v1/links", tags=["links"])
 app.include_router(links.redirect_router, tags=["redirect"])
@@ -63,13 +68,15 @@ async def ping(
         await db.execute(text("SELECT 1"))
         result["db"] = "connected"
     except Exception as e:
-        result["db"] = f"error: {e}"
+        logger.error(f"Database healthcheck failed: {e}")
+        result["db"] = "error"
 
     try:
         await redis.ping()
         result["redis"] = "connected"
     except Exception as e:
-        result["redis"] = f"error: {e}"
+        logger.error(f"Redis healthcheck failed: {e}")
+        result["redis"] = "error"
 
     all_ok = all("error" not in v for v in result.values())
     result["status"] = "ok" if all_ok else "degraded"
