@@ -1,3 +1,8 @@
+[project]
+name = "url-shortener"
+version = "0.1.0"
+dependencies = []
+
 [tool.ruff]
 extend-exclude = ["alembic/versions/*"]
 
