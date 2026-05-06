@@ -1,3 +1,4 @@
+import logging
 from typing import Callable, Dict, Optional
 
 from fastapi import Request, Response
@@ -8,6 +9,8 @@ from pyrate_limiter import Duration, Limiter, Rate, RedisBucket
 from redis.asyncio import Redis
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 async def user_aware_identifier(request: Request) -> str:
@@ -21,8 +24,8 @@ async def user_aware_identifier(request: Request) -> str:
             user_id = payload.get("sub")
             if user_id:
                 return f"user:{user_id}"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to decode JWT for rate limiting: {e}")
 
     # Fallback to IP
     forwarded = request.headers.get("X-Forwarded-For")

@@ -33,8 +33,8 @@ class ClickRepository:
         )
 
         if ip and ip.strip():
-            query = query.where(ClickEvent.ip_address.ilike(f"%{ip}%"))
-            count_query = count_query.where(ClickEvent.ip_address.ilike(f"%{ip}%"))
+            query = query.where(ClickEvent.ip_address.contains(ip))
+            count_query = count_query.where(ClickEvent.ip_address.contains(ip))
 
         if country and country.strip():
             if country == "null":

@@ -29,6 +29,8 @@ jobs:
         run: |
           uvx ruff check .
           uvx ruff format --check .
+      - name: Security Audit (Bandit)
+        run: uvx bandit -r app/
       - name: Run Tests
         env:
           JWT_SECRET: ci_test_secret
