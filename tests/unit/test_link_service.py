@@ -168,15 +168,15 @@ async def test_get_click_stats(link_service, mock_link, mock_redis):
 
     mock_redis.get.side_effect = redis_get_side_effect
 
-    link_service.click_repo.get_aggregated_stats.return_value = {
-        "total_clicks": 0,
-        "unique_ips": 0,
-        "granularity": "day",
-        "clicks_over_time": [],
-        "clicks_by_day": [],
-        "top_referers": [],
-        "top_countries": [],
-    }
+    link_service.click_repo.get_aggregated_stats.return_value = ClickStatsResponse(
+        total_clicks=0,
+        unique_ips=0,
+        granularity="day",
+        clicks_over_time=[],
+        clicks_by_day=[],
+        top_referers=[],
+        top_countries=[],
+    )
 
     result = await link_service.get_click_stats("test1", user_id=1)
 
