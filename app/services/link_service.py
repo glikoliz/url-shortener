@@ -298,15 +298,14 @@ class LinkService:
                 if redis_clicks is not None:
                     total_clicks = int(redis_clicks)
 
-            stats["total_clicks"] = total_clicks
-            stats["is_public"] = link.is_public_stats
-            result = ClickStatsResponse.model_validate(stats)
+            stats.total_clicks = total_clicks
+            stats.is_public = link.is_public_stats
 
             if self.cache:
                 await self.cache.set_stats(
-                    short_code, granularity, result.model_dump(mode="json")
+                    short_code, granularity, stats.model_dump(mode="json")
                 )
-            return result
+            return stats
 
     async def get_user_links(self, user_id: int) -> list[LinkResponse]:
         if self.cache:

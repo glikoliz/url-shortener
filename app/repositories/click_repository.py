@@ -4,6 +4,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.click_event import ClickEvent
+from app.schemas.click import ClickStatsResponse
 
 
 class ClickRepository:
@@ -74,35 +75,37 @@ class ClickRepository:
     ) -> dict:
         now = datetime.now(timezone.utc)
 
-        # Define time window and granularity
-        if granularity == "minute":
-            since = now - timedelta(hours=1)
-            group_func = func.date_trunc("minute", ClickEvent.clicked_at)
-            time_delta = timedelta(minutes=1)
-            num_points = 60
-            format_str = "%Y-%m-%dT%H:%M:00Z"
-        elif granularity == "hour":
-            since = now - timedelta(hours=23)  # last 24 hours
+        # Configuration mapping for different granularities
+        # Format: (since_delta, trunc_part, point_delta, num_points, format_str)
+        config = {
+            "minute": (
+                timedelta(hours=1),
+                "minute",
+                timedelta(minutes=1),
+                60,
+                "%Y-%m-%dT%H:%M:00Z",
+            ),
+            "hour": (
+                timedelta(hours=23),
+                "hour",
+                timedelta(hours=1),
+                24,
+                "%Y-%m-%dT%H:00:00Z",
+            ),
+            "day": (timedelta(days=29), "day", timedelta(days=1), 30, "%Y-%m-%d"),
+        }
+
+        delta, trunc, time_delta, num_points, format_str = config.get(
+            granularity, config["hour"]
+        )
+
+        since = now - delta
+        if trunc in ("hour", "day"):
             since = since.replace(minute=0, second=0, microsecond=0)
-            group_func = func.date_trunc("hour", ClickEvent.clicked_at)
-            time_delta = timedelta(hours=1)
-            num_points = 24
-            format_str = "%Y-%m-%dT%H:00:00Z"
-        elif granularity == "day":
-            since = now - timedelta(days=29)  # last 30 days
-            since = since.replace(hour=0, minute=0, second=0, microsecond=0)
-            group_func = func.date(ClickEvent.clicked_at)
-            time_delta = timedelta(days=1)
-            num_points = 30
-            format_str = "%Y-%m-%d"
-        else:  # default
-            granularity = "hour"
-            since = now - timedelta(hours=23)  # last 24 hours
-            since = since.replace(minute=0, second=0, microsecond=0)
-            group_func = func.date_trunc("hour", ClickEvent.clicked_at)
-            time_delta = timedelta(hours=1)
-            num_points = 24
-            format_str = "%Y-%m-%dT%H:00:00Z"
+        if trunc == "day":
+            since = since.replace(hour=0)
+
+        group_func = func.date_trunc(trunc, ClickEvent.clicked_at)
 
         clicks_query = (
             select(
@@ -166,18 +169,20 @@ class ClickRepository:
             )
             current += time_delta
 
-        return {
-            "total_clicks": summary.total,
-            "unique_ips": summary.unique_ips,
-            "clicks_over_time": clicks_over_time,
-            "clicks_by_day": clicks_over_time,
-            "granularity": granularity,
-            "top_referers": [
+        return ClickStatsResponse(
+            total_clicks=summary.total,
+            unique_ips=summary.unique_ips,
+            clicks_over_time=clicks_over_time,
+            clicks_by_day=clicks_over_time
+            if granularity != "day"
+            else clicks_over_time,
+            granularity=granularity,
+            top_referers=[
                 {"referer": r.referer or "Direct", "clicks": r.clicks}
                 for r in referers_result.all()
             ],
-            "top_countries": [
+            top_countries=[
                 {"country": r.country, "clicks": r.clicks}
                 for r in countries_result.all()
             ],
-        }
+        )

@@ -73,8 +73,8 @@ async def test_get_aggregated_stats_explicit_hour(repo, mock_session):
     ]
 
     stats = await repo.get_aggregated_stats(1, granularity="hour")
-    assert stats["granularity"] == "hour"
-    assert len(stats["clicks_over_time"]) == 24  # last 24 hours
+    assert stats.granularity == "hour"
+    assert len(stats.clicks_over_time) == 24  # last 24 hours
 
 
 @pytest.mark.asyncio
@@ -93,6 +93,6 @@ async def test_get_aggregated_stats_explicit_minute(repo, mock_session):
     ]
 
     stats = await repo.get_aggregated_stats(1, granularity="minute")
-    assert stats["granularity"] == "minute"
-    assert len(stats["clicks_over_time"]) == 60  # last 60 minutes
+    assert stats.granularity == "minute"
+    assert len(stats.clicks_over_time) == 60  # last 60 minutes
     assert mock_session.execute.call_count == 4
