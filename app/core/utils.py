@@ -10,21 +10,36 @@ _geoip_reader = None
 
 
 def get_client_ip(request: Request) -> str:
-    """
-    Extracts the real client IP, prioritizing X-Forwarded-For (from Proxy/Nginx)
-    over the direct client host.
-    """
-    # 1. Check X-Forwarded-For (Standard for proxies)
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
-
-    # 2. Check X-Real-IP (Alternative)
     real_ip = request.headers.get("x-real-ip")
     if real_ip:
         return real_ip
-
     return request.client.host if request.client else "unknown"
+
+
+def is_bot(request: Request) -> bool:
+    """
+    Checks if the request is from a known bot/crawler.
+    """
+    user_agent = request.headers.get("user-agent", "").lower()
+    if not user_agent:
+        return True
+
+    bot_keywords = [
+        "bot",
+        "crawler",
+        "spider",
+        "slurp",
+        "facebookexternalhit",
+        "telegrambot",
+        "whatsapp",
+        "outbrain",
+        "pinterest",
+        "vkshare",
+    ]
+    return any(keyword in user_agent for keyword in bot_keywords)
 
 
 def get_client_country(request: Request) -> str | None:

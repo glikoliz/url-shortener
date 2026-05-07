@@ -9,7 +9,7 @@ from app.api.dependencies import (
     get_optional_current_user,
 )
 from app.core.responses import SSEResponse
-from app.core.utils import get_client_country, get_client_ip
+from app.core.utils import get_client_country, get_client_ip, is_bot
 from app.limiter import RateLimiter
 from app.models.user import User
 from app.schemas.click import ClickStatsResponse, PaginatedClickResponse
@@ -134,15 +134,18 @@ async def redirect_to_original(
     user_agent = request.headers.get("user-agent")
     referer = request.headers.get("referer")
 
-    await service.increment_click_redis(short_code)
-
-    background_tasks.add_task(
-        service.record_click_bg,
-        short_code=short_code,
-        ip=ip,
-        country=country,
-        user_agent=user_agent,
-        referer=referer,
-    )
+    # Skip recording clicks for bots/crawlers
+    if not is_bot(request):
+        await service.increment_click_redis(short_code)
+        background_tasks.add_task(
+            service.record_click_bg,
+            short_code=short_code,
+            ip=ip,
+            country=country,
+            user_agent=user_agent,
+            referer=referer,
+        )
+    else:
+        logger.info(f"Bot detected for {short_code}, skipping click recording.")
 
     return RedirectResponse(url=original_url, status_code=302)
