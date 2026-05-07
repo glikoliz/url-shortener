@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 
 from app.api.dependencies import (
@@ -9,7 +9,7 @@ from app.api.dependencies import (
     get_optional_current_user,
 )
 from app.core.responses import SSEResponse
-from app.core.utils import get_client_country, get_client_ip, is_bot
+from app.core.utils import get_client_country, get_client_ip
 from app.limiter import RateLimiter
 from app.models.user import User
 from app.schemas.click import ClickStatsResponse, PaginatedClickResponse
@@ -123,29 +123,16 @@ async def redirect_to_original(
     background_tasks: BackgroundTasks,
     service: LinkService = Depends(get_link_service),
 ):
-    original_url = await service.resolve_link(short_code)
+    target_url = await service.handle_click(
+        short_code=short_code,
+        ip=get_client_ip(request),
+        country=get_client_country(request),
+        user_agent=request.headers.get("user-agent"),
+        referer=request.headers.get("referer"),
+        background_tasks=background_tasks,
+    )
 
-    # DEBUG: Log all headers to see what proxy sends
-    headers_dict = {k: v for k, v in request.headers.items()}
-    logger.info(f"Redirect headers for {short_code}: {headers_dict}")
+    if target_url:
+        return RedirectResponse(url=target_url, status_code=302)
 
-    ip = get_client_ip(request)
-    country = get_client_country(request)
-    user_agent = request.headers.get("user-agent")
-    referer = request.headers.get("referer")
-
-    # Skip recording clicks for bots/crawlers
-    if not is_bot(request):
-        await service.increment_click_redis(short_code)
-        background_tasks.add_task(
-            service.record_click_bg,
-            short_code=short_code,
-            ip=ip,
-            country=country,
-            user_agent=user_agent,
-            referer=referer,
-        )
-    else:
-        logger.info(f"Bot detected for {short_code}, skipping click recording.")
-
-    return RedirectResponse(url=original_url, status_code=302)
+    return Response(content="Link preview disabled", status_code=403)

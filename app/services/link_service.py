@@ -156,6 +156,54 @@ class LinkService:
                 )
             return link.original_url
 
+    async def handle_click(
+        self,
+        short_code: str,
+        ip: str,
+        country: str | None,
+        user_agent: str | None,
+        referer: str | None,
+        background_tasks: BackgroundTasks,
+    ) -> str | None:
+        """
+        High-level logic for handling a link click.
+        Returns the original URL if it's a real user, or None if it's a bot.
+        """
+        original_url = await self.resolve_link(short_code)
+
+        if self._is_bot(user_agent):
+            logger.info(f"Bot detected for {short_code}, serving empty response.")
+            return None
+
+        await self.increment_click_redis(short_code)
+        background_tasks.add_task(
+            self.record_click_bg,
+            short_code=short_code,
+            ip=ip,
+            country=country,
+            user_agent=user_agent,
+            referer=referer,
+        )
+        return original_url
+
+    def _is_bot(self, user_agent: str | None) -> bool:
+        if not user_agent:
+            return True
+        ua = user_agent.lower()
+        bot_keywords = [
+            "bot",
+            "crawler",
+            "spider",
+            "slurp",
+            "facebookexternalhit",
+            "telegrambot",
+            "whatsapp",
+            "outbrain",
+            "pinterest",
+            "vkshare",
+        ]
+        return any(keyword in ua for keyword in bot_keywords)
+
     async def increment_click_redis(self, short_code: str) -> int:
         if not self.redis:
             return 0
