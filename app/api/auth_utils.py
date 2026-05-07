@@ -9,7 +9,7 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
         value=access_token,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="lax",
+        samesite="none",
         max_age=int(settings.jwt_expiration_minutes) * 60,
     )
     response.set_cookie(
@@ -17,11 +17,21 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
         value=refresh_token,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="lax",
+        samesite="none",
         max_age=int(settings.refresh_token_expiration_days) * 24 * 60 * 60,
     )
 
 
 def delete_auth_cookies(response: Response) -> None:
-    response.delete_cookie(key="access_token")
-    response.delete_cookie(key="refresh_token")
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="none",
+    )
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="none",
+    )
