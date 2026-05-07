@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     log_level: str = "INFO"
     max_request_size: int = 10 * 1024  # 10 KB
+    geoip_path: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

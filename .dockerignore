@@ -10,3 +10,7 @@ __pycache__/
 .pytest_cache/
 README.md
 tests/
+*.mmdb
+frontend/
+node_modules/
+dist/

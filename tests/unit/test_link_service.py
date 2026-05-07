@@ -128,7 +128,9 @@ async def test_count_click_db(link_service, mock_link):
     link_service.link_repo.get_by_code.return_value = link
     link_service.link_repo.increment_clicks_by_code.return_value = 1
 
-    await link_service.count_click("abc123", "1.2.3.4", "Mozilla", "https://ref.com")
+    await link_service.count_click(
+        "abc123", "1.2.3.4", "US", "Mozilla", "https://ref.com"
+    )
 
     link_service.link_repo.increment_clicks_by_code.assert_awaited_once_with("abc123")
     link_service.click_repo.create.assert_awaited_once()
@@ -315,7 +317,7 @@ async def test_shorten_url_anonymous(link_service, mock_link):
     link_service.link_repo.create.assert_called_once()
 
     link_service.link_repo.get_by_code.return_value = created_link
-    await link_service.count_click("anon123", "1.2.3.4", "agent", "referer")
+    await link_service.count_click("anon123", "1.2.3.4", "US", "agent", "referer")
 
     link_service.click_repo.create.assert_not_called()
     link_service.link_repo.increment_clicks_by_code.assert_not_called()
@@ -436,7 +438,7 @@ async def test_record_click_bg_error(link_service):
         side_effect=Exception("DB Error"),
     ):
         with patch("app.services.link_service.logger.error") as mock_log:
-            await link_service.record_click_bg("abc", "1.1.1.1", "UA", "ref")
+            await link_service.record_click_bg("abc", "1.1.1.1", "US", "UA", "ref")
             mock_log.assert_called()
 
 
@@ -451,8 +453,8 @@ async def test_get_link_info_not_found(link_service):
 @pytest.mark.asyncio
 async def test_record_click_bg(link_service, mock_redis):
     with patch("app.services.link_service.LinkService.count_click") as mock_count:
-        await link_service.record_click_bg("abc", "1.2.3.4", "UA", "ref")
-        mock_count.assert_awaited_once_with("abc", "1.2.3.4", "UA", "ref")
+        await link_service.record_click_bg("abc", "1.2.3.4", "US", "UA", "ref")
+        mock_count.assert_awaited_once_with("abc", "1.2.3.4", "US", "UA", "ref")
 
 
 @pytest.mark.asyncio
@@ -460,7 +462,7 @@ async def test_count_click_db_recording(link_service, mock_link):
     link = mock_link(id=1, short_code="abc")
     link_service.link_repo.get_by_code.return_value = link
 
-    await link_service.count_click("abc", "1.2.3.4", None, None)
+    await link_service.count_click("abc", "1.2.3.4", "US", None, None)
 
     link_service.click_repo.create.assert_awaited_once()
 
@@ -537,7 +539,7 @@ async def test_increment_click_redis_not_found(link_service):
 async def test_count_click_not_found_log(link_service):
     link_service.link_repo.get_by_code.return_value = None
     with patch("app.services.link_service.logger.warning") as mock_log:
-        await link_service.count_click("nonexistent", None, None, None)
+        await link_service.count_click("nonexistent", None, None, None, None)
         mock_log.assert_called_once()
 
 

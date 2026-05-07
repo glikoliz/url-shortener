@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import RedirectResponse
 
@@ -16,6 +18,7 @@ from app.services.link_service import LinkService
 
 router = APIRouter()
 redirect_router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -121,6 +124,10 @@ async def redirect_to_original(
     service: LinkService = Depends(get_link_service),
 ):
     original_url = await service.resolve_link(short_code)
+
+    # DEBUG: Log all headers to see what proxy sends
+    headers_dict = {k: v for k, v in request.headers.items()}
+    logger.info(f"Redirect headers for {short_code}: {headers_dict}")
 
     ip = get_client_ip(request)
     country = get_client_country(request)

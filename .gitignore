@@ -11,3 +11,8 @@ htmlcov/
 .vscode/
 .ruff_cache/
 .idea/
+
+*.mmdb
+
+frontend/dist/
+frontend/node_modules/

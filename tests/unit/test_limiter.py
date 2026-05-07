@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import Request
 from jose import jwt
+from starlette.datastructures import Headers
 
 from app.config import settings
 from app.limiter import user_aware_identifier
@@ -40,7 +41,7 @@ async def test_user_aware_identifier_invalid_token_fallback_ip(mock_request):
 
 @pytest.mark.asyncio
 async def test_user_aware_identifier_x_forwarded_for(mock_request):
-    mock_request.headers = {"X-Forwarded-For": "10.0.0.1, 10.0.0.2"}
+    mock_request.headers = Headers({"X-Forwarded-For": "10.0.0.1, 10.0.0.2"})
 
     identifier = await user_aware_identifier(mock_request)
     assert identifier == "10.0.0.1"

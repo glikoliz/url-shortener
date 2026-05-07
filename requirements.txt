@@ -20,3 +20,4 @@ pytest-cov
 testcontainers[postgres]
 testcontainers[redis]
 httpx
+geoip2
