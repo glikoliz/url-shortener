@@ -1,6 +1,14 @@
 {
     "rewrites": [
         {
+            "source": "/api/v1/:path*",
+            "destination": "BACKEND_URL_PLACEHOLDER/api/v1/:path*"
+        },
+        {
+            "source": "/s/:path*",
+            "destination": "BACKEND_URL_PLACEHOLDER/s/:path*"
+        },
+        {
             "source": "/:path*",
             "destination": "/index.html"
         }
