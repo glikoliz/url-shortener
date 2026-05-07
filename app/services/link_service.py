@@ -190,6 +190,7 @@ class LinkService:
         self,
         short_code: str,
         ip: str | None,
+        country: str | None,
         user_agent: str | None,
         referer: str | None,
     ) -> None:
@@ -201,6 +202,7 @@ class LinkService:
                     event = ClickEvent(
                         link_id=link.id,
                         ip_address=ip[:45] if ip else None,
+                        country=country[:2] if country else None,
                         user_agent=user_agent[:512] if user_agent else None,
                         referer=referer[:2048] if referer else None,
                     )
@@ -416,6 +418,7 @@ class LinkService:
         self,
         short_code: str,
         ip: str | None,
+        country: str | None,
         user_agent: str | None,
         referer: str | None,
     ) -> None:
@@ -423,7 +426,7 @@ class LinkService:
         try:
             async with self.uow_factory() as uow:
                 service = LinkService(uow, self.redis, self.uow_factory)
-                await service.count_click(short_code, ip, user_agent, referer)
+                await service.count_click(short_code, ip, country, user_agent, referer)
         except Exception as e:
             logger.error(f"Background click recording failed for {short_code}: {e}")
 

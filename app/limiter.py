@@ -9,6 +9,7 @@ from pyrate_limiter import Duration, Limiter, Rate, RedisBucket
 from redis.asyncio import Redis
 
 from app.config import settings
+from app.core.utils import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +29,7 @@ async def user_aware_identifier(request: Request) -> str:
             logger.debug(f"Failed to decode JWT for rate limiting: {e}")
 
     # Fallback to IP
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0]
-    return request.client.host if request.client else "unknown"
+    return get_client_ip(request)
 
 
 class LimiterManager:

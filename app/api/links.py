@@ -7,6 +7,7 @@ from app.api.dependencies import (
     get_optional_current_user,
 )
 from app.core.responses import SSEResponse
+from app.core.utils import get_client_country, get_client_ip
 from app.limiter import RateLimiter
 from app.models.user import User
 from app.schemas.click import ClickStatsResponse, PaginatedClickResponse
@@ -121,7 +122,8 @@ async def redirect_to_original(
 ):
     original_url = await service.resolve_link(short_code)
 
-    ip = request.client.host if request.client else None
+    ip = get_client_ip(request)
+    country = get_client_country(request)
     user_agent = request.headers.get("user-agent")
     referer = request.headers.get("referer")
 
@@ -131,6 +133,7 @@ async def redirect_to_original(
         service.record_click_bg,
         short_code=short_code,
         ip=ip,
+        country=country,
         user_agent=user_agent,
         referer=referer,
     )
