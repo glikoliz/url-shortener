@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return null;
       }
     },
-    staleTime: Infinity, // User profile doesn't change often
+    staleTime: 5 * 60 * 1000, // Re-check user profile every 5 minutes
     gcTime: Infinity,
   });
 

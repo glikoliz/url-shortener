@@ -279,6 +279,10 @@ class LinkService:
             link = await self._get_link_or_404(short_code)
             is_owner = user_id is not None and link.user_id == user_id
             if not is_owner and not link.is_public_stats:
+                if user_id is None and link.user_id is not None:
+                    raise HTTPException(
+                        status_code=401, detail="Authentication required"
+                    )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Not your link"
                 )
@@ -306,6 +310,10 @@ class LinkService:
             link = await self._get_link_or_404(short_code)
             is_owner = user_id is not None and link.user_id == user_id
             if not is_owner and not link.is_public_stats:
+                if user_id is None and link.user_id is not None:
+                    raise HTTPException(
+                        status_code=401, detail="Authentication required"
+                    )
                 raise HTTPException(status_code=403, detail="Not your link")
 
             items, total = await self.uow.clicks.get_by_link_id(
@@ -336,6 +344,10 @@ class LinkService:
             link = await self._get_link_or_404(short_code)
             is_owner = user_id is not None and link.user_id == user_id
             if not is_owner and not link.is_public_stats:
+                if user_id is None and link.user_id is not None:
+                    raise HTTPException(
+                        status_code=401, detail="Authentication required"
+                    )
                 raise HTTPException(status_code=403, detail="Not your link")
 
             stats = await self.uow.clicks.get_aggregated_stats(

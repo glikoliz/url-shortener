@@ -32,10 +32,8 @@ async def get_optional_current_user(
 ) -> User | None:
     if not access_token:
         return None
-    try:
-        return await service.get_authenticated_user(access_token)
-    except Exception:
-        return None
+    # Token is present but may be expired/invalid → raise 401 so the client can refresh
+    return await service.get_authenticated_user(access_token)
 
 
 def get_link_service(

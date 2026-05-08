@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   AreaChart,
@@ -18,6 +18,8 @@ import { useSSESubscription, useSSEStatus } from '../context/SSEContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import type { LinkStats, ClicksResponse, SSEEvent, Click } from '../types';
+import { useAuth } from '../context/AuthContext';
+
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleString(undefined, {
@@ -190,6 +192,7 @@ const LinkAnalytics = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const { user, loading: authLoading } = useAuth();
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'clicked_at', direction: 'desc' });
   const [selectedGranularity, setSelectedGranularity] = useState<string | null>('hour');
   const [currentPage, setCurrentPage] = useState(1);
@@ -209,11 +212,25 @@ const LinkAnalytics = () => {
   } = useQuery<LinkStats>({
     queryKey: ['linkStats', code, selectedGranularity],
     queryFn: () => apiClient(selectedGranularity ? `/links/i/${code}/stats?granularity=${selectedGranularity}` : `/links/i/${code}/stats`),
-    enabled: !!code,
+    enabled: !!code && !authLoading,
+
     retry: false,
     staleTime: 5000,
     placeholderData: keepPreviousData,
   });
+
+  const GRANULARITY_FALLBACK: Record<string, string | null> = {
+    minute: 'hour',
+    hour: 'day',
+    day: null,
+  };
+  useEffect(() => {
+    if (!stats?.clicks_by_day || loadingStats) return;
+    const allZero = stats.clicks_by_day.length > 0 && stats.clicks_by_day.every(d => d.clicks === 0);
+    if (allZero && selectedGranularity !== null && selectedGranularity in GRANULARITY_FALLBACK) {
+      setSelectedGranularity(GRANULARITY_FALLBACK[selectedGranularity] ?? null);
+    }
+  }, [stats?.clicks_by_day, loadingStats]);
 
   // Clicks Query
   const skip = (currentPage - 1) * CLICKS_PER_PAGE;
@@ -226,7 +243,8 @@ const LinkAnalytics = () => {
   } = useQuery<ClicksResponse>({
     queryKey: ['linkClicks', code, currentPage, debouncedIp, debouncedCountry, sortConfig.key, sortConfig.direction],
     queryFn: () => apiClient(`/links/i/${code}/clicks?limit=${CLICKS_PER_PAGE}&skip=${skip}&ip=${debouncedIp}&country=${debouncedCountry}&sort_by=${sortConfig.key}&sort_dir=${sortConfig.direction}`),
-    enabled: !!code,
+    enabled: !!code && !authLoading,
+
     retry: false,
     staleTime: 5000,
     placeholderData: keepPreviousData,
@@ -290,6 +308,26 @@ const LinkAnalytics = () => {
   const topCountry = topCountries[0]?.country || 'Unknown';
   const totalUniqueClicks = stats?.unique_ips || 0;
 
+  const { chartData, isTrimmed } = useMemo(() => {
+    const raw = stats?.clicks_by_day || [];
+    if (raw.length === 0) return { chartData: [], isTrimmed: false };
+
+    const firstNonZero = raw.findIndex(d => d.clicks > 0);
+    if (firstNonZero === -1) {
+      return { chartData: raw.slice(-20), isTrimmed: raw.length > 20 };
+    }
+
+    const lastNonZero = raw.reduce(
+      (acc, d, i) => (d.clicks > 0 ? i : acc), firstNonZero
+    );
+
+    const PADDING = 3;
+    const start = Math.max(0, firstNonZero - PADDING);
+    const end = Math.min(raw.length - 1, lastNonZero + PADDING);
+    const trimmed = start > 0 || end < raw.length - 1;
+    return { chartData: raw.slice(start, end + 1), isTrimmed: trimmed };
+  }, [stats?.clicks_by_day]);
+
   const requestSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -327,7 +365,7 @@ const LinkAnalytics = () => {
           }}>
             <div style={{ color: 'var(--error-color)' }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
             </div>
           </div>
@@ -362,7 +400,7 @@ const LinkAnalytics = () => {
 
   // 2. Check for Not Found
   if (isNotFound) {
-     return (
+    return (
       <div style={{ padding: '60px 20px', display: 'flex', justifyContent: 'center' }} className="animate-fade-in">
         <GlassCard style={{ maxWidth: '500px', width: '100%', textAlign: 'center', padding: '48px 32px' }}>
           <h1 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '12px' }}>Link Not Found</h1>
@@ -391,7 +429,7 @@ const LinkAnalytics = () => {
     return (
       <div style={{ padding: '100px 20px', textAlign: 'center', color: 'var(--text-secondary)' }} className="animate-fade-in">
         <div className="loader" style={{ marginBottom: '20px' }}>
-           <RefreshCw size={40} className="animate-spin" style={{ animation: 'spin 1s linear infinite', margin: '0 auto' }} />
+          <RefreshCw size={40} className="animate-spin" style={{ animation: 'spin 1s linear infinite', margin: '0 auto' }} />
         </div>
         <p>Loading analytics data...</p>
       </div>
@@ -446,7 +484,7 @@ const LinkAnalytics = () => {
             fontWeight: '600'
           }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+              <circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" />
             </svg>
             Public Showcase
           </div>
@@ -498,7 +536,22 @@ const LinkAnalytics = () => {
       {/* Clicks over time chart */}
       <GlassCard style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: '600' }}>Clicks over Time</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: '600' }}>Clicks over Time</h2>
+            {isTrimmed && (
+              <span style={{
+                fontSize: '11px',
+                color: 'var(--accent-color)',
+                background: 'rgba(56,189,248,0.1)',
+                border: '1px solid rgba(56,189,248,0.2)',
+                borderRadius: '6px',
+                padding: '2px 8px',
+                opacity: 0.85,
+              }}>
+                auto-zoom
+              </span>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {['day', 'hour', 'minute'].map((g) => (
               <button
@@ -531,10 +584,10 @@ const LinkAnalytics = () => {
           <div style={{ height: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
             Loading…
           </div>
-        ) : (stats?.clicks_by_day?.length ?? 0) > 0 ? (
+        ) : (chartData.length ?? 0) > 0 ? (
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart
-              data={stats?.clicks_by_day || []}
+              data={chartData}
               margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
               style={{ outline: 'none' }}
             >

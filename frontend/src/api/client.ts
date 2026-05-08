@@ -1,15 +1,14 @@
-const API_URL = import.meta.env.VITE_API_URL || ''; // Fallback to relative path if not specified
-
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 let isRefreshing = false;
-let refreshSubscribers: (() => void)[] = [];
+let refreshSubscribers: ((success: boolean) => void)[] = [];
 
-const subscribeTokenRefresh = (cb: () => void) => {
+const subscribeTokenRefresh = (cb: (success: boolean) => void) => {
   refreshSubscribers.push(cb);
 };
 
-const onTokenRefreshed = () => {
-  refreshSubscribers.map((cb) => cb());
+const onTokenRefreshed = (success: boolean) => {
+  refreshSubscribers.forEach((cb) => cb(success));
   refreshSubscribers = [];
 };
 
@@ -41,19 +40,13 @@ export const apiClient = async (endpoint: string, { body, ...customConfig }: Api
     }
   }
 
+  const fullUrl = `${API_URL}${endpoint}`;
+
   try {
-    const response = await fetch(`${API_URL}${endpoint}`, config);
-    const data = await response.json().catch(() => null);
+    const response = await fetch(fullUrl, config);
 
-    if (response.ok) {
-      return data;
-    }
-
-    // Handle 401 Unauthorized - attempt to refresh
+    // Handle 401 - attempt to refresh (all endpoints except /auth/refresh itself)
     if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
-      if (endpoint === '/auth/me') {
-        throw new Error('Unauthorized');
-      }
       if (!isRefreshing) {
         isRefreshing = true;
         try {
@@ -64,31 +57,46 @@ export const apiClient = async (endpoint: string, { body, ...customConfig }: Api
 
           if (refreshResponse.ok) {
             isRefreshing = false;
-            onTokenRefreshed();
+            onTokenRefreshed(true);
 
-            const retryResponse = await fetch(`${API_URL}${endpoint}`, config);
+            const retryResponse = await fetch(fullUrl, config);
+            if (!retryResponse.ok) {
+              // /auth/me returning 401 even after refresh means session is truly gone
+              if (endpoint === '/auth/me') throw new Error('Unauthorized');
+              throw new Error('Retry failed after refresh');
+            }
             return await retryResponse.json();
           } else {
             isRefreshing = false;
-            // Only force logout/redirect if not the initial auth check
-            if (endpoint !== '/auth/me') {
-              logout();
-            }
-            throw new Error('Session expired');
+            onTokenRefreshed(false);
+            if (endpoint !== '/auth/me') logout();
+            throw new Error('Unauthorized');
           }
         } catch (e) {
           isRefreshing = false;
-          logout();
+          onTokenRefreshed(false);
           throw e;
         }
       } else {
-        await new Promise<void>((resolve) => {
-          subscribeTokenRefresh(() => resolve());
+        // Wait for refresh to complete
+        const success = await new Promise<boolean>((resolve) => {
+          subscribeTokenRefresh((res) => resolve(res));
         });
 
-        const retryResponse = await fetch(`${API_URL}${endpoint}`, config);
-        return await retryResponse.json();
+        if (success) {
+          const retryResponse = await fetch(fullUrl, config);
+          if (!retryResponse.ok) throw new Error('Retry failed after refresh');
+          return await retryResponse.json();
+        } else {
+          throw new Error('Unauthorized');
+        }
       }
+    }
+
+    const data = await response.json().catch(() => null);
+
+    if (response.ok) {
+      return data;
     }
 
     let errorMessage = 'API Error';
@@ -101,9 +109,6 @@ export const apiClient = async (endpoint: string, { body, ...customConfig }: Api
     throw new Error(errorMessage);
 
   } catch (error: any) {
-    if (error.message === 'Session expired') {
-      logout();
-    }
     throw error;
   }
 };
@@ -112,7 +117,7 @@ export const logout = async () => {
   try {
     await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
   } catch (e) {
-    // Silently fail or use a production-safe logger
+    // Silently fail or log in dev
   }
 
   if (window.location.pathname !== '/login') {
