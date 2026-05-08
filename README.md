@@ -8,9 +8,7 @@
 
 A full-stack URL shortening service with real-time analytics, built with a focus on backend engineering best practices. Fully deployed and production-ready.
 
-🔗 **[Live Demo — Analytics Dashboard](https://gliko-shorturl.vercel.app/links/DEMO/analytics)**
-
-![Analytics Dashboard](docs/screenshot.png)
+[![Analytics Dashboard](docs/screenshot.png)](https://gliko-shorturl.vercel.app/links/DEMO/analytics)
 
 ## Architecture
 
