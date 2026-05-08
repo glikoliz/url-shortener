@@ -64,7 +64,7 @@ graph LR
 ### Infrastructure & DevOps
 
 * **Containerization:** Docker Compose setup optimized for low-resource environments with defined memory limits and LRU eviction policies.
-* **CI/CD:** Three separate GitHub Actions workflows with path-based triggers — backend changes run Ruff linting, Bandit security audit, and pytest with coverage; frontend changes run ESLint and a production build check. A third workflow handles parallel deploys (frontend to Vercel, backend to VPS via SSH). Pipelines only run when relevant code is modified.
+* **CI/CD:** Four separate GitHub Actions workflows with strict path-based triggers. Backend changes trigger CI (Ruff, Bandit, pytest) and VPS deployment; frontend changes trigger CI (ESLint, build check) and Vercel deployment. Deployments run entirely independently, preventing unnecessary server restarts or builds.
 * **Networking:** Vercel Rewrites act as a Serverless Reverse Proxy to hide the backend IP and bypass CORS. Includes a `/ping` healthcheck endpoint for DB and Redis connectivity monitoring.
 
 ## Quick Start
