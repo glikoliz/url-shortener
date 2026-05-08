@@ -3,8 +3,10 @@
 [![Backend CI](https://github.com/glikoliz/url-shortener/actions/workflows/backend.yml/badge.svg)](https://github.com/glikoliz/url-shortener/actions/workflows/backend.yml)
 [![Frontend CI](https://github.com/glikoliz/url-shortener/actions/workflows/frontend.yml/badge.svg)](https://github.com/glikoliz/url-shortener/actions/workflows/frontend.yml)
 ![Coverage](https://img.shields.io/badge/coverage-93%25-brightgreen)
-![Python](https://img.shields.io/badge/python-3.12+-blue?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=flat&logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
 
 A full-stack URL shortening service with real-time analytics, built with a focus on backend engineering best practices. Fully deployed and production-ready.
 
