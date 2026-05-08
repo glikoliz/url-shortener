@@ -8,14 +8,14 @@
 
 A full-stack URL shortening service with real-time analytics, built with a focus on backend engineering best practices. Fully deployed and production-ready.
 
-**Live Demo (populated with test data):** [Insert Link Here]
+🔗 **[Live Demo — Analytics Dashboard](https://gliko-shorturl.vercel.app/links/DEMO/analytics)**
 
 ![Analytics Dashboard](docs/screenshot.png)
 
 ## Architecture
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
+%%{init: {'theme': 'dark'}}%%
 graph LR
     Browser -->|1. Loads SPA| Vercel[Vercel<br/>React + Static]
     Browser -->|2. /api/* requests| Vercel
@@ -33,6 +33,7 @@ graph LR
         PostgreSQL
         Redis
     end
+    style VPS fill:transparent,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 ## Tech Stack
