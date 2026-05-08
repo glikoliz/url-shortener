@@ -10,7 +10,10 @@ services:
         limits:
           memory: 150M
     logging: &default-logging
-      driver: "none"
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
 
   redis:
     image: redis:7-alpine
