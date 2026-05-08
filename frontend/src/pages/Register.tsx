@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import toast from 'react-hot-toast';
+
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import GlassCard from '../components/GlassCard';
@@ -24,7 +26,8 @@ const Register = () => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
-      alert('Passwords do not match');
+      toast.error('Passwords do not match');
+
       return;
     }
     mutation.mutate();

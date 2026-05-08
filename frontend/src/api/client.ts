@@ -1,4 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || ''; // Fallback to relative path if not specified
+
 
 let isRefreshing = false;
 let refreshSubscribers: (() => void)[] = [];
@@ -111,7 +112,7 @@ export const logout = async () => {
   try {
     await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
   } catch (e) {
-    console.error('Failed to logout on server', e);
+    // Silently fail or use a production-safe logger
   }
 
   if (window.location.pathname !== '/login') {

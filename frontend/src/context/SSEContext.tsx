@@ -31,8 +31,8 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const connect = () => {
-      const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000/api/v1';
-      const url = `${API_URL}/links/events/stream`;
+      const API_BASE = import.meta.env.VITE_API_URL || '';
+      const url = `${API_BASE}/links/events/stream`;
 
       eventSource = new EventSource(url, { withCredentials: true });
 
@@ -46,6 +46,7 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const data = JSON.parse(event.data);
           listeners.current.forEach(listener => listener(data));
         } catch (err) {
+          console.warn('Failed to parse SSE message:', err);
         }
       };
 
@@ -103,8 +104,8 @@ export const OptimizedSSEProvider: React.FC<{ children: React.ReactNode }> = ({ 
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const connect = () => {
-      const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000/api/v1';
-      const url = `${API_URL}/links/events/stream`;
+      const API_BASE = import.meta.env.VITE_API_URL || '';
+      const url = `${API_BASE}/links/events/stream`;
 
       eventSource = new EventSource(url, { withCredentials: true });
 
@@ -118,7 +119,7 @@ export const OptimizedSSEProvider: React.FC<{ children: React.ReactNode }> = ({ 
           const data = JSON.parse(event.data);
           listeners.current.forEach(l => l(data));
         } catch (err) {
-          // Parse error: skipping message
+          console.warn('Failed to parse SSE message:', err);
         }
       };
 

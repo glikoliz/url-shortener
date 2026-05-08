@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import toast from 'react-hot-toast';
+
 import { useNavigate } from 'react-router-dom';
 import GlassCard from './GlassCard';
 import { apiClient } from '../api/client';
@@ -25,7 +27,8 @@ const LinksTable = ({ links, isLoading, onDelete }: LinksTableProps) => {
       await apiClient(`/links/i/${shortCode}`, { method: 'DELETE' });
       if (onDelete) onDelete();
     } catch {
-      alert('Failed to delete link');
+      toast.error('Failed to delete link');
+
     }
   };
 

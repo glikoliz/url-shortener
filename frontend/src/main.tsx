@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { OptimizedSSEProvider } from './context/SSEContext'
+import { Toaster } from 'react-hot-toast'
 import './index.css'
 import App from './App'
 
@@ -27,6 +28,15 @@ createRoot(rootElement).render(
         <AuthProvider>
           <OptimizedSSEProvider>
             <App />
+            <Toaster position="bottom-right" toastOptions={{
+              duration: 3000,
+              style: {
+                background: 'var(--glass-bg)',
+                color: 'white',
+                border: '1px solid var(--glass-border)',
+                backdropFilter: 'blur(10px)',
+              }
+            }} />
           </OptimizedSSEProvider>
         </AuthProvider>
       </QueryClientProvider>

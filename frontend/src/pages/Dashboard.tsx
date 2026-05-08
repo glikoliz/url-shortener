@@ -23,6 +23,7 @@ const Dashboard = () => {
         try {
           setAnonLinks(JSON.parse(saved));
         } catch (e) {
+          console.warn('Failed to parse saved links from localStorage:', e);
         }
       }
     }
