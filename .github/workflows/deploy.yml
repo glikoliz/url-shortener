@@ -1,4 +1,4 @@
-name: Deploy Frontend to Vercel
+name: Deploy Fullstack to Production
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  deploy:
+  deploy-frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -24,3 +24,17 @@ jobs:
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           vercel-args: '--prod'
           working-directory: .
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute SSH commands on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/url-shortener
+            git pull origin main
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
