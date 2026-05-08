@@ -2,7 +2,7 @@
 
 [![Backend CI](https://github.com/glikoliz/url-shortener/actions/workflows/backend.yml/badge.svg)](https://github.com/glikoliz/url-shortener/actions/workflows/backend.yml)
 [![Frontend CI](https://github.com/glikoliz/url-shortener/actions/workflows/frontend.yml/badge.svg)](https://github.com/glikoliz/url-shortener/actions/workflows/frontend.yml)
-![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-93%25-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12+-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)
 
