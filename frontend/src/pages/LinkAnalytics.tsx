@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   AreaChart,
@@ -219,18 +219,16 @@ const LinkAnalytics = () => {
     placeholderData: keepPreviousData,
   });
 
-  const GRANULARITY_FALLBACK: Record<string, string | null> = {
-    minute: 'hour',
-    hour: 'day',
-    day: null,
-  };
+  const hasDoneInitialFallback = useRef(false);
+
   useEffect(() => {
-    if (!stats?.clicks_by_day || loadingStats) return;
+    if (!stats?.clicks_by_day || loadingStats || hasDoneInitialFallback.current) return;
     const allZero = stats.clicks_by_day.length > 0 && stats.clicks_by_day.every(d => d.clicks === 0);
-    if (allZero && selectedGranularity !== null && selectedGranularity in GRANULARITY_FALLBACK) {
-      setSelectedGranularity(GRANULARITY_FALLBACK[selectedGranularity] ?? null);
+    if (allZero && selectedGranularity === 'hour') {
+      setSelectedGranularity('day');
     }
-  }, [stats?.clicks_by_day, loadingStats]);
+    hasDoneInitialFallback.current = true;
+  }, [stats?.clicks_by_day, loadingStats, selectedGranularity]);
 
   // Clicks Query
   const skip = (currentPage - 1) * CLICKS_PER_PAGE;
@@ -308,24 +306,8 @@ const LinkAnalytics = () => {
   const topCountry = topCountries[0]?.country || 'Unknown';
   const totalUniqueClicks = stats?.unique_ips || 0;
 
-  const { chartData, isTrimmed } = useMemo(() => {
-    const raw = stats?.clicks_by_day || [];
-    if (raw.length === 0) return { chartData: [], isTrimmed: false };
-
-    const firstNonZero = raw.findIndex(d => d.clicks > 0);
-    if (firstNonZero === -1) {
-      return { chartData: raw.slice(-20), isTrimmed: raw.length > 20 };
-    }
-
-    const lastNonZero = raw.reduce(
-      (acc, d, i) => (d.clicks > 0 ? i : acc), firstNonZero
-    );
-
-    const PADDING = 3;
-    const start = Math.max(0, firstNonZero - PADDING);
-    const end = Math.min(raw.length - 1, lastNonZero + PADDING);
-    const trimmed = start > 0 || end < raw.length - 1;
-    return { chartData: raw.slice(start, end + 1), isTrimmed: trimmed };
+  const chartData = useMemo(() => {
+    return stats?.clicks_by_day || [];
   }, [stats?.clicks_by_day]);
 
   const requestSort = (key: string) => {
@@ -538,19 +520,6 @@ const LinkAnalytics = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: '600' }}>Clicks over Time</h2>
-            {isTrimmed && (
-              <span style={{
-                fontSize: '11px',
-                color: 'var(--accent-color)',
-                background: 'rgba(56,189,248,0.1)',
-                border: '1px solid rgba(56,189,248,0.2)',
-                borderRadius: '6px',
-                padding: '2px 8px',
-                opacity: 0.85,
-              }}>
-                auto-zoom
-              </span>
-            )}
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {['day', 'hour', 'minute'].map((g) => (

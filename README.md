@@ -55,7 +55,7 @@ graph LR
   * Background recursive link detection: asynchronously follows redirect chains to prevent self-referencing loops.
   * Bot filtering: click events from known crawlers are silently discarded to keep analytics clean.
   * Per-endpoint Redis-backed rate limiting.
-* **Testing:** 86% code coverage across unit and integration tests. Unit tests use mocked UoW/Redis for isolation; integration tests run against real PostgreSQL and Redis via Testcontainers.
+* **Testing:** 93% code coverage across unit and integration tests. Unit tests use mocked UoW/Redis for isolation; integration tests run against real PostgreSQL and Redis via Testcontainers.
 
 ### Frontend (React + Vite)
 
