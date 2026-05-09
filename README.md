@@ -16,24 +16,40 @@ A full-stack URL shortening service with real-time analytics, built with a focus
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
-graph LR
-    Browser -->|1. Loads SPA| Vercel[Vercel<br/>React + Static]
-    Browser -->|2. /api/* requests| Vercel
-    Vercel -->|Rewrite proxy| Nginx
-
-    Browser -.->|3. SSE stream<br/>direct connection| Nginx
-
-    Nginx -->|proxy_pass| FastAPI
-    FastAPI -->|async queries| PostgreSQL[(PostgreSQL)]
-    FastAPI -->|cache / counters<br/>pub-sub| Redis[(Redis)]
-
-    subgraph VPS
-        Nginx
-        FastAPI
-        PostgreSQL
-        Redis
+flowchart TD
+    subgraph Presentation
+        Router["API Routers<br/>(Endpoints)"]
+        Deps["Dependencies<br/>(Auth, Rate Limit)"]
+        Router -.-> Deps
     end
-    style VPS fill:transparent,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5
+
+    subgraph Business Logic
+        Service["Service Layer<br/>(Core Logic)"]
+        CacheSvc["Cache Service<br/>(3-Level Redis)"]
+        BG["Background Tasks<br/>(Async Processing)"]
+    end
+
+    subgraph Data Access
+        UoW["Unit of Work<br/>(Transactions)"]
+        Repos["Repositories<br/>(SQLAlchemy)"]
+    end
+
+    subgraph Storage
+        DB[("(PostgreSQL)")]
+        Redis[("(Redis)")]
+    end
+
+    Router -->|"Calls methods with Pydantic models"| Service
+    Service <-->|"Reads & Invalidates cache"| CacheSvc
+    Service -->|"Manages transactions via"| UoW
+    Service -.->|"Schedules background execution"| BG
+
+    UoW -->|"Provides access to"| Repos
+    Repos <-->|"Async SQL queries"| DB
+
+    BG -->|"Saves click data via"| UoW
+    BG -->|"Publishes SSE events to"| Redis
+    CacheSvc <-->|"Stores JSON & Counters in"| Redis
 ```
 
 ## Tech Stack
