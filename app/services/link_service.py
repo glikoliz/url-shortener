@@ -351,7 +351,7 @@ class LinkService:
                 raise HTTPException(status_code=403, detail="Not your link")
 
             stats = await self.uow.clicks.get_aggregated_stats(
-                link.id, granularity=granularity
+                link.id, granularity=granularity, is_demo=(link.short_code == "DEMO")
             )
 
             total_clicks = link.clicks

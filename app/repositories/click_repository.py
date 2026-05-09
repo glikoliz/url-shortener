@@ -71,9 +71,18 @@ class ClickRepository:
         return items, total
 
     async def get_aggregated_stats(
-        self, link_id: int, granularity: str | None = None
-    ) -> dict:
+        self, link_id: int, granularity: str | None = None, is_demo: bool = False
+    ) -> ClickStatsResponse:
         now = datetime.now(timezone.utc)
+        if is_demo:
+            max_date_query = select(func.max(ClickEvent.clicked_at)).where(
+                ClickEvent.link_id == link_id
+            )
+            max_date = (await self.db.execute(max_date_query)).scalar()
+            if max_date:
+                if max_date.tzinfo is None:
+                    max_date = max_date.replace(tzinfo=timezone.utc)
+                now = max_date
 
         # Configuration mapping for different granularities
         # Format: (since_delta, trunc_part, point_delta, num_points, format_str)
