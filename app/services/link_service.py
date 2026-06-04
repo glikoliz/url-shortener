@@ -63,16 +63,11 @@ class LinkService:
         elif ttl_minutes and not expires_at:
             expires_at = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
 
-        # Basic protection against shortening our own links (shallow check)
-        if settings.base_url in original_url:
-            if "/s/" in original_url:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="This is already a short link",
-                )
+        # Basic protection against shortening our own redirect links
+        if settings.base_url in original_url and "/s/" in original_url:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Original URL is already pointing to this service",
+                detail="This is already a short link",
             )
 
         max_retries = 5
@@ -437,11 +432,8 @@ class LinkService:
         final_url = await _resolve_final_url(original_url)
 
         is_recursive = False
-        if settings.base_url in final_url:
-            if "/s/" in final_url or any(
-                p in final_url for p in ["/api/", "/dashboard"]
-            ):
-                is_recursive = True
+        if settings.base_url in final_url and "/s/" in final_url:
+            is_recursive = True
 
         if is_recursive:
             logger.warning(

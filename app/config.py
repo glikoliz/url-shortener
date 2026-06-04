@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expiration_minutes: float = 30.0
     refresh_token_expiration_days: int = 7
-    base_url: str = "http://localhost:8000"
+    base_url: str = "https://glikourl.site"
     allowed_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

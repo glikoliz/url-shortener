@@ -481,13 +481,15 @@ async def test_shorten_url_with_ttl_minutes(link_service, mock_link):
 
 
 @pytest.mark.asyncio
-async def test_shorten_url_already_our_service(link_service):
+async def test_shorten_url_already_our_service(link_service, mock_link):
     from app.config import settings
 
-    with pytest.raises(HTTPException) as exc:
-        await link_service.shorten_url(f"{settings.base_url}/dashboard", 1)
-    assert exc.value.status_code == 400
-    assert "Original URL is already pointing" in exc.value.detail
+    created_link = mock_link(short_code="xyz123")
+    link_service.link_repo.get_by_code.return_value = None
+    link_service.link_repo.create.return_value = created_link
+
+    res = await link_service.shorten_url(f"{settings.base_url}/dashboard", 1)
+    assert res.short_code == "xyz123"
 
 
 @pytest.mark.asyncio
@@ -576,3 +578,30 @@ async def test_get_link_info_not_owner(link_service, mock_link):
     with pytest.raises(HTTPException) as exc:
         await link_service.get_link_info("abc", user_id=99)
     assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_shorten_url_indirect_dashboard_reference(
+    link_service, mock_resolve_url, mock_link
+):
+    created_link = mock_link(id=123, short_code="xyz123")
+    link_service.link_repo.get_by_code.return_value = None
+    link_service.link_repo.create.return_value = created_link
+
+    mock_resolve_url.side_effect = None
+    mock_resolve_url.return_value = f"{settings.base_url}/dashboard"
+    bg_tasks = BackgroundTasks()
+
+    res = await link_service.shorten_url(
+        user_id=1,
+        original_url="https://some-proxy.com/dashboard",
+        background_tasks=bg_tasks,
+    )
+    assert res.short_code == "xyz123"
+
+    link_service.link_repo.get_by_code.return_value = created_link
+
+    await link_service._validate_link_bg(
+        123, "https://some-proxy.com/dashboard", 1, "xyz123"
+    )
+    link_service.link_repo.delete.assert_not_awaited()
