@@ -1,3 +1,4 @@
+import asyncio
 import ipaddress
 import logging
 import secrets
@@ -10,6 +11,7 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import BackgroundTasks, HTTPException, status
 from redis.asyncio import Redis
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
@@ -412,9 +414,18 @@ class LinkService:
         """Generator for Server-Sent Events."""
         async with subscribe_to_user_updates(user_id) as pubsub:
             yield ": ping\n\n"
-            async for message in pubsub.listen():
-                if message["type"] == "message":
-                    yield f"data: {message['data']}\n\n"
+            while True:
+                try:
+                    async for message in pubsub.listen():
+                        if message["type"] == "message":
+                            yield f"data: {message['data']}\n\n"
+                    break
+                except (RedisTimeoutError, asyncio.TimeoutError):
+                    yield ": ping\n\n"
+                    continue
+                except Exception as e:
+                    logger.error(f"Error in SSE stream for user {user_id}: {e}")
+                    break
 
     async def _get_link_or_404(self, short_code: str) -> Link:
         link = await self.uow.links.get_by_code(short_code)
